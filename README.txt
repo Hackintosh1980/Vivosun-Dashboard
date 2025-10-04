@@ -1,27 +1,26 @@
 # 🌱 VIVOSUN Thermo Dashboard
 
-Ein Desktop-Dashboard für den **VIVOSUN THB-1S Thermo/Hygro Sensor**, entwickelt von Dominik Rosenthal.  
-Die App verbindet sich via Bluetooth mit dem Sensor, visualisiert Temperatur, Luftfeuchtigkeit und VPD in Echtzeit und speichert Messwerte in CSV.  
+Ein Desktop-Dashboard für den **VIVOSUN THB-1S Thermo/Hygrometer**, entwickelt von Dominik Rosenthal.  
+Die App verbindet sich via Bluetooth, visualisiert Temperatur, Luftfeuchtigkeit & VPD in Echtzeit und speichert Messwerte.
 
 ---
 
 ## ✨ Features
 
-- 🔍 Geräte-Scan via Bluetooth (ohne CLI, direkt in der App)  
-- 📈 Live-Charts für Temperatur, Luftfeuchtigkeit und VPD (intern & extern)  
-- 🌡️ Leaf- & Humidity-Offset einstellbar (°C/°F, %)  
-- 🔄 Automatischer Reconnect bei Bluetooth-Abbruch  
-- 📊 CSV-Export kompatibel zum GrowHub-Format  
-- 📂 History & Snapshot Speicherung (`thermo_history.csv`, `thermo_values.json`)  
-- 🌱 Scatter VPD Chart mit Comfort-Zonen für alle Cannabis-Growphasen  
-- 🖼️ Custom Logos & Branding (kein Python-Ei mehr im Dock 😉)  
-- 🗑️ Config-Reset direkt im Dashboard  
-- 🔄 Restart-Funktion ohne manuelles Neustarten  
-- 💻 Getestet auf macOS (Python 3.12, PyInstaller)  
+- 🔍 Geräte-Scan direkt in der GUI  
+- 📈 Live-Charts (intern & extern) für Temperatur, Luftfeuchtigkeit & VPD  
+- 🌡️ Leaf-Offset & Humidity-Offset einstellbar  
+- 🔄 Auto-Reconnect bei Verbindungsabbruch  
+- 📊 Export & Historie im GrowHub-kompatiblen CSV  
+- 🖼️ VPD Scatter-Chart mit Komfortzonen  
+- 🗑️ Config-Löschen / Neustart-Funktion  
+- ✅ Getestet & gepackt für macOS via Python 3.12 + PyInstaller  
 
 ---
 
 ## 🖼️ Screenshots
+
+*(Die Screenshots liegen im Ordner `screenshots/` im Repo.)*
 
 ### Setup
 ![Setup Screenshot](screenshots/setup.png)
@@ -32,22 +31,22 @@ Die App verbindet sich via Bluetooth mit dem Sensor, visualisiert Temperatur, Lu
 ### VPD Scatter
 ![VPD Scatter Screenshot](screenshots/vpd_scatter.png)
 
-### GrowHub CSV Viewer
-![GrowHub Screenshot](screenshots/growhub_csv.png)
+### GrowHub CSV Ansicht
+![GrowHub CSV Screenshot](screenshots/growhub_csv.png)
 
 ---
 
-## 📦 Installation & Build
+## 📦 Installation & Build (macOS)
 
 ### Voraussetzungen
+
 - macOS  
 - Python **3.12** installiert  
-  - [Download von python.org](https://www.python.org/downloads/macos/)  
-  - oder mit Homebrew: `brew install python@3.12`
 
 ---
 
 ### Build (global)
+
 ```bash
 chmod +x build_app.sh
 ./build_app.sh
