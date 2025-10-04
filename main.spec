@@ -9,9 +9,6 @@ import config
 
 block_cipher = None
 
-# Pfad zu site-packages (abhängig von venv oder global)
-site_packages = next(p for p in sys.path if p.endswith("site-packages"))
-
 a = Analysis(
     ['main.py'],                      # Einstiegspunkt
     pathex=['.'],
@@ -21,17 +18,24 @@ a = Analysis(
         ('config.json', '.'),          # Konfiguration
         ('status.json', '.'),          # Status
         ('thermo_history.csv', '.'),   # Historie
-        (os.path.join(site_packages, 'vivosun_thermo*'), 'vivosun_thermo'),
     ],
     hiddenimports=(
         collect_submodules('matplotlib')
         + collect_submodules('tkinter')
         + collect_submodules('vivosun_thermo')
-        + ['vivosun_thermo.client', 'vivosun_thermo.scanner', 'vivosun_thermo.conversion']
     ),
     hookspath=[],
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # --- Schwergewichte, die wir definitiv nicht brauchen ---
+        'torch', 'torchvision', 'torchaudio', 'ultralytics',
+        'tensorflow', 'cv2', 'onnx', 'openvino',
+        'sklearn',
+
+        # --- scipy + Submodule (wird von pandas/matplotlib getriggert) ---
+        'scipy', 'scipy.spatial', 'scipy.linalg',
+        'scipy.special', 'scipy.stats'
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -71,11 +75,11 @@ app = BUNDLE(
         "CFBundleName": config.APP_NAME,
         "CFBundleDisplayName": config.APP_NAME,
         "CFBundleGetInfoString": f"{config.APP_NAME} by {config.APP_AUTHOR}",
-        "CFBundleShortVersionString": config.APP_VERSION,   # sichtbare Version im Finder
-        "CFBundleVersion": config.APP_VERSION,              # interne Build-Nummer
+        "CFBundleShortVersionString": config.APP_VERSION,
+        "CFBundleVersion": config.APP_VERSION,
         "NSHumanReadableCopyright": f"© 2025 {config.APP_AUTHOR}",
-        "NSHighResolutionCapable": True,                    # Retina / HiDPI
-        "LSMultipleInstancesProhibited": True,              # nur eine Instanz
-        "LSUIElement": False,                               # False = Dock-Icon bleibt sichtbar
+        "NSHighResolutionCapable": True,
+        "LSMultipleInstancesProhibited": True,
+        "LSUIElement": False,
     },
 )
