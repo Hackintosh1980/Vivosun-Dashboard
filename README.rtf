@@ -1,0 +1,53 @@
+# 🌱 VIVOSUN Thermo Dashboard
+
+Ein Desktop-Dashboard für den **VIVOSUN THB-1S Thermo/Hygro Sensor**, entwickelt von Dominik Rosenthal.  
+Die App verbindet sich via Bluetooth mit dem Sensor, visualisiert Temperatur, Luftfeuchtigkeit und VPD in Echtzeit und speichert Messwerte in CSV.  
+
+---
+
+## ✨ Features
+
+- 🔍 Geräte-Scan via Bluetooth (ohne CLI, direkt in der App)  
+- 📈 Live-Charts für Temperatur, Luftfeuchtigkeit und VPD (intern & extern)  
+- 🌡️ Leaf- & Humidity-Offset einstellbar (°C/°F, %)  
+- 🔄 Automatischer Reconnect bei Bluetooth-Abbruch  
+- 📊 CSV-Export kompatibel zum GrowHub-Format  
+- 📂 History & Snapshot Speicherung (`thermo_history.csv`, `thermo_values.json`)  
+- 🌱 Scatter VPD Chart mit Comfort-Zonen für alle Cannabis-Growphasen  
+- 🖼️ Custom Logos & Branding (kein Python-Ei mehr im Dock 😉)  
+- 🗑️ Config-Reset direkt im Dashboard  
+- 🔄 Restart-Funktion ohne manuelles Neustarten  
+- 💻 Getestet auf macOS (Python 3.12, PyInstaller)  
+
+---
+
+## 🖼️ Screenshots
+
+### Setup
+![Setup Screenshot](screenshots/setup.png)
+
+### Dashboard
+![Dashboard Screenshot](screenshots/dashboard.png)
+
+### VPD Scatter
+![VPD Scatter Screenshot](screenshots/vpd_scatter.png)
+
+### GrowHub CSV Viewer
+![GrowHub Screenshot](screenshots/growhub_csv.png)
+
+---
+
+## 📦 Installation & Build
+
+### Voraussetzungen
+- macOS  
+- Python **3.12** installiert  
+  - [Download von python.org](https://www.python.org/downloads/macos/)  
+  - oder mit Homebrew: `brew install python@3.12`
+
+---
+
+### Build (global)
+```bash
+chmod +x build_app.sh
+./build_app.sh
