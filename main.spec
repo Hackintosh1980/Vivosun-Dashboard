@@ -9,6 +9,9 @@ import config
 
 block_cipher = None
 
+# Pfad zu site-packages (abhängig von venv oder global)
+site_packages = next(p for p in sys.path if p.endswith("site-packages"))
+
 a = Analysis(
     ['main.py'],                      # Einstiegspunkt
     pathex=['.'],
@@ -18,11 +21,13 @@ a = Analysis(
         ('config.json', '.'),          # Konfiguration
         ('status.json', '.'),          # Status
         ('thermo_history.csv', '.'),   # Historie
+        (os.path.join(site_packages, 'vivosun_thermo*'), 'vivosun_thermo'),
     ],
     hiddenimports=(
         collect_submodules('matplotlib')
         + collect_submodules('tkinter')
         + collect_submodules('vivosun_thermo')
+        + ['vivosun_thermo.client', 'vivosun_thermo.scanner', 'vivosun_thermo.conversion']
     ),
     hookspath=[],
     runtime_hooks=[],
