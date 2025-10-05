@@ -1,12 +1,6 @@
-import os
-import re
-import sys
-import tkinter as tk
-from tkinter import messagebox, ttk
+import os, re, sys, threading, queue, asyncio, tkinter as tk
+from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
-import threading
-import queue
-import asyncio
 
 try:
     from . import config, utils, icon_loader, gui
@@ -19,243 +13,155 @@ from vivosun_thermo import VivosunThermoScanner
 def run_setup():
     root = tk.Tk()
     root.title("🌱 VIVOSUN Setup")
-    root.geometry("600x800")
+    root.geometry("520x650")   # kompakter
     root.configure(bg=config.BG)
+    root.resizable(False, False)
 
-    # Icon für Fenster + Dock setzen
     icon_loader.set_app_icon(root)
 
     # ---------- TITLE ----------
-    title = tk.Label(
+    tk.Label(
         root,
         text="🌱 VIVOSUN Thermo Setup Tool",
-        bg=config.BG,
-        fg=config.TEXT,
-        font=("Segoe UI", 22, "bold")
-    )
-    title.pack(pady=(15, 5))
+        bg=config.BG, fg=config.TEXT,
+        font=("Segoe UI", 18, "bold")
+    ).pack(pady=(10, 5))
 
     # ---------- LOGO ----------
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     logo_path = os.path.join(assets_dir, "setup.png")
-
     if os.path.exists(logo_path):
-        img = Image.open(logo_path).resize((480, 360), Image.LANCZOS)
+        img = Image.open(logo_path).resize((360, 270), Image.LANCZOS)
         logo_img = ImageTk.PhotoImage(img)
-        logo_label = tk.Label(root, image=logo_img, bg=config.BG)
-        logo_label.image = logo_img
-        logo_label.pack(pady=10)
+        lbl = tk.Label(root, image=logo_img, bg=config.BG)
+        lbl.image = logo_img
+        lbl.pack(pady=5)
 
-    # ---------- TEXTFELD ----------
+    # ---------- TEXTBOX ----------
     text = tk.Text(
-        root,
-        width=75,
-        height=15,
-        bg="#071116",
-        fg="#bff5c9",
-        font=("Consolas", 10)
+        root, width=62, height=8,
+        bg="#071116", fg="#bff5c9",
+        font=("Consolas", 9)
     )
-    text.pack(padx=10, pady=10)
+    text.pack(padx=10, pady=6)
 
-    # ---------- GERÄTE-LISTE ----------
+    # ---------- LISTBOX ----------
     list_frame = tk.Frame(root, bg=config.CARD)
-    list_frame.pack(fill="x", padx=10, pady=(0, 10))
-
+    list_frame.pack(fill="x", padx=10, pady=(0, 5))
     device_listbox = tk.Listbox(
         list_frame,
-        bg=config.CARD,
-        fg=config.TEXT,
-        selectbackground="lime",
-        selectforeground="black",
-        font=("Segoe UI", 16, "bold"),
-        height=8
+        bg=config.CARD, fg=config.TEXT,
+        selectbackground="lime", selectforeground="black",
+        font=("Segoe UI", 12, "bold"), height=5
     )
-    device_listbox.pack(fill="x", padx=5, pady=5)
+    device_listbox.pack(fill="x", padx=4, pady=4)
 
-    devices = []
-    result_queue = queue.Queue()
+    # ---------- PROGRESSBAR ----------
+    style = ttk.Style()
+    style.theme_use("default")
+    style.configure(
+        "Pulse.Horizontal.TProgressbar",
+        troughcolor=config.CARD, background="#00ccff",
+        darkcolor="#004466", lightcolor="#33ddff",
+        thickness=14
+    )
+    progress = ttk.Progressbar(
+        root, orient="horizontal", mode="determinate",
+        length=300, style="Pulse.Horizontal.TProgressbar", maximum=100
+    )
+    progress.pack(pady=(4, 10))
 
-    def add_device_to_list(device_id):
-        device_listbox.insert(tk.END, f"⚪ {device_id}")
+    pulse_running, pulse_value, pulse_dir = False, 0, 1
+    def start_pulse():
+        nonlocal pulse_running, pulse_value, pulse_dir
+        pulse_running, pulse_value, pulse_dir = True, 0, 1
+        animate_pulse()
+    def stop_pulse():
+        nonlocal pulse_running
+        pulse_running = False
+        progress["value"] = 0
+    def animate_pulse():
+        nonlocal pulse_value, pulse_dir
+        if not pulse_running: return
+        pulse_value += pulse_dir * 5
+        if pulse_value >= 100: pulse_dir = -1
+        elif pulse_value <= 0: pulse_dir = 1
+        progress["value"] = pulse_value
+        root.after(50, animate_pulse)
 
-    # ---------- SAVE ----------
-    def save_selected():
-        sel = device_listbox.curselection()
-        if not sel:
-            text.insert("end", "❌ Kein Gerät ausgewählt!\n")
-            return
+    # ---------- SCAN + SAVE ----------
+    devices, result_queue = [], queue.Queue()
 
-        selected_id = device_listbox.get(sel[0]).replace("⚪ ", "").replace("🟢 ", "")
-        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-        cfg["device_id"] = selected_id
+    def add_device_to_list(dev_id):
+        device_listbox.insert(tk.END, f"⚪ {dev_id}")
 
-        use_celsius = messagebox.askyesno(
-            "Unit Selection",
-            "Möchten Sie Celsius verwenden?\n\nYes = °C, No = °F"
-        )
-        cfg["unit_celsius"] = use_celsius
+    def finish_scan(output):
+        nonlocal devices
+        stop_pulse(); scan_btn.config(state="normal")
+        text.insert("end", output + "\n✅ Scan abgeschlossen.\n"); text.see("end")
+        devices.clear(); device_listbox.delete(0, tk.END)
+        for line in output.splitlines():
+            m = re.search(r"([0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12})", line)
+            if m: devices.append(m.group(1)); add_device_to_list(m.group(1))
+        if not devices: text.insert("end", "⚠️ Keine gültigen Device-IDs gefunden.\n")
 
-        utils.safe_write_json(config.CONFIG_FILE, cfg)
-        text.insert(
-            "end",
-            f"💾 Saved Device-ID {selected_id} and unit_celsius={use_celsius} in config.json\n"
-        )
-        text.see("end")
-
-        # --- Setup schließen ---
-        root.destroy()
-
-        # --- Dashboard sofort starten ---
-        gui.run_app(selected_id)
-
-    # ---------- SCAN ----------
-    scan_btn = None
+    def poll_queue():
+        try:
+            while True: finish_scan(result_queue.get_nowait())
+        except queue.Empty: pass
+        root.after(500, poll_queue)
 
     def scan_devices():
         def worker():
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                scanner = VivosunThermoScanner()
-                found = loop.run_until_complete(scanner.discover(timeout=60))
-                if not found:
-                    result_queue.put("⚠️ Keine Geräte gefunden.")
-                else:
-                    out = []
-                    for d in found:
-                        out.append(str(d))
-                    result_queue.put("\n".join(out))
+                found = loop.run_until_complete(VivosunThermoScanner().discover(timeout=30))
+                result_queue.put("\n".join(map(str, found)) if found else "⚠️ Keine Geräte gefunden.")
             except Exception as e:
                 result_queue.put(f"❌ Fehler beim Scan: {e}")
-            finally:
-                loop.close()
+            finally: loop.close()
 
-        text.insert("end", "🔍 Scanning for devices (60s)…\n")
-        text.see("end")
-        scan_btn.config(state="disabled")
-        start_pulse()
+        text.insert("end", "🔍 Scanning for devices (30s)…\n"); text.see("end")
+        scan_btn.config(state="disabled"); start_pulse()
         threading.Thread(target=worker, daemon=True).start()
 
-    def finish_scan(output):
-        nonlocal devices
-        stop_pulse()
-        scan_btn.config(state="normal")
-
-        text.insert("end", output + "\n")
-        text.insert("end", "✅ Scan abgeschlossen.\n")
-        text.see("end")
-
-        devices = []
-        device_listbox.delete(0, tk.END)
-
-        for line in output.splitlines():
-            match = re.search(r"([0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12})", line)
-            if match:
-                devices.append(match.group(1))
-                add_device_to_list(match.group(1))
-
-        if not devices:
-            text.insert("end", "⚠️ Keine gültigen Device-IDs gefunden.\n")
-
-    def poll_queue():
-        try:
-            while True:
-                output = result_queue.get_nowait()
-                finish_scan(output)
-        except queue.Empty:
-            pass
-        root.after(500, poll_queue)
+    def save_selected():
+        sel = device_listbox.curselection()
+        if not sel:
+            text.insert("end", "❌ Kein Gerät ausgewählt!\n")
+            return
+        dev_id = device_listbox.get(sel[0]).replace("⚪ ", "").replace("🟢 ", "")
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+        cfg["device_id"] = dev_id
+        use_c = messagebox.askyesno("Einheit", "Celsius verwenden?\n\nYes = °C, No = °F")
+        cfg["unit_celsius"] = use_c
+        utils.safe_write_json(config.CONFIG_FILE, cfg)
+        text.insert("end", f"💾 Saved {dev_id}, °C={use_c}\n"); text.see("end")
+        root.destroy()
+        gui.run_app(dev_id)
 
     # ---------- BUTTONS ----------
-    button_frame = tk.Frame(root, bg=config.CARD)
-    button_frame.pack(pady=10)
-
-    def button_style(master, text, cmd):
+    btn_frame = tk.Frame(root, bg=config.CARD)
+    btn_frame.pack(pady=(4, 6))
+    def make_btn(t, cmd, bg="lime"):
         return tk.Button(
-            master,
-            text=text,
-            command=cmd,
-            bg="lime",
-            fg="black",
-            font=("Segoe UI", 14, "bold"),
-            relief="ridge",
-            padx=12, pady=6
+            btn_frame, text=t, command=cmd,
+            bg=bg, fg="black", font=("Segoe UI", 12, "bold"),
+            padx=8, pady=4, relief="ridge"
         )
-
-    scan_btn = button_style(button_frame, "🔍 Scan Devices", scan_devices)
-    scan_btn.pack(side="left", padx=8)
-
-    button_style(button_frame, "💾 Save Selected", save_selected).pack(side="left", padx=8)
+    scan_btn = make_btn("🔍 Scan Devices", scan_devices)
+    scan_btn.pack(side="left", padx=6)
+    make_btn("💾 Save Selected", save_selected).pack(side="left", padx=6)
 
     # ---------- FOOTER ----------
-    footer = tk.Frame(root, bg=config.CARD)
-    footer.pack(side="bottom", fill="x", pady=8)
-
-    style = ttk.Style()
-    style.theme_use("default")
-    style.configure(
-        "Pulse.Horizontal.TProgressbar",
-        troughcolor=config.CARD,
-        background="#00ccff",
-        darkcolor="#004466",
-        lightcolor="#33ddff",
-        thickness=18
-    )
-
-    progress = ttk.Progressbar(
-        footer,
-        orient="horizontal",
-        mode="determinate",
-        length=280,
-        style="Pulse.Horizontal.TProgressbar",
-        maximum=100
-    )
-    progress.pack(side="left", padx=12, pady=4)
-
-    pulse_running = False
-    pulse_value = 0
-    pulse_dir = 1
-
-    def start_pulse():
-        nonlocal pulse_running, pulse_value, pulse_dir
-        pulse_running = True
-        pulse_value = 0
-        pulse_dir = 1
-        animate_pulse()
-
-    def stop_pulse():
-        nonlocal pulse_running
-        pulse_running = False
-        progress["value"] = 0
-
-    def animate_pulse():
-        nonlocal pulse_value, pulse_dir
-        if not pulse_running:
-            return
-        pulse_value += pulse_dir * 5
-        if pulse_value >= 100:
-            pulse_value = 100
-            pulse_dir = -1
-        elif pulse_value <= 0:
-            pulse_value = 0
-            pulse_dir = 1
-        progress["value"] = pulse_value
-        root.after(50, animate_pulse)
-
-    footer_label = tk.Label(
-        footer,
-        text="📟 VIVOSUN Setup Tool v2.1 (Scanner API)",
-        bg=config.CARD,
-        fg=config.TEXT,
-        font=("Segoe UI", 12)
-    )
-    footer_label.pack(side="right", padx=10)
+    tk.Label(
+        root,
+        text="📟 VIVOSUN Setup Tool v2.2  •  Dominik Hackintosh",
+        bg=config.CARD, fg=config.TEXT, font=("Segoe UI", 10)
+    ).pack(side="bottom", pady=6)
 
     poll_queue()
-
-    # Icon final setzen (falls Widgets es überschreiben)
-    icon_loader.set_app_icon(root)
-
     root.mainloop()
 
 
