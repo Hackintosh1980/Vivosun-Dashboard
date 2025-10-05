@@ -26,7 +26,7 @@ source venv/bin/activate
 # 5. Abhängigkeiten installieren
 echo "📥 Installiere Dependencies in venv..."
 pip install --upgrade pip setuptools wheel
-pip install pyinstaller pillow matplotlib numpy pyobjc-framework-Cocoa
+pip install pyinstaller pillow matplotlib numpy pyobjc-framework-Cocoa vivosun-thermo pandas
 
 # 6. App bauen
 echo "🏗  Baue App mit PyInstaller..."

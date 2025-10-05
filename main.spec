@@ -1,7 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import sys, os
-from PyInstaller.utils.hooks import collect_submodules
 
 # --- Version und App-Infos aus config.py ---
 sys.path.insert(0, os.path.abspath("."))   # Projektpfad hinzufügen
@@ -19,22 +18,31 @@ a = Analysis(
         ('status.json', '.'),          # Status
         ('thermo_history.csv', '.'),   # Historie
     ],
-    hiddenimports=(
-        collect_submodules('matplotlib')
-        + collect_submodules('tkinter')
-        + collect_submodules('vivosun_thermo')
-    ),
+    hiddenimports=[
+        # Matplotlib Minimal
+        "matplotlib.backends.backend_tkagg",
+        "matplotlib.pyplot",
+        "matplotlib.dates",
+        "matplotlib.patheffects",
+        # Tkinter
+        "tkinter",
+        # Numpy / Pillow
+        "numpy",
+        "PIL",
+        # Pandas für GrowHub CSV
+        "pandas",
+        # BLE Vivosun
+        "vivosun_thermo",
+    ],
     hookspath=[],
     runtime_hooks=[],
     excludes=[
-        # --- Schwergewichte, die wir definitiv nicht brauchen ---
-        'torch', 'torchvision', 'torchaudio', 'ultralytics',
-        'tensorflow', 'cv2', 'onnx', 'openvino',
-        'sklearn',
-
-        # --- scipy + Submodule (wird von pandas/matplotlib getriggert) ---
-        'scipy', 'scipy.spatial', 'scipy.linalg',
-        'scipy.special', 'scipy.stats'
+        # explizit rauswerfen was nicht gebraucht wird
+        "matplotlib.tests",
+        "mpl_toolkits.tests",
+        "tkinter.test",
+        "scipy",
+        "torch",   # falls er YOLO-Kram reinziehen will
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
