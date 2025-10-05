@@ -28,7 +28,7 @@ def open_window(parent, config=config, utils=utils):
     icon_loader.link_icon(win, parent)
 
     win.title("🌱 VPD Comfort Chart")
-    win.geometry("1600x900")
+    win.geometry("1200x800")
     win.configure(bg=config.BG)
 
     # ---------- HEADER ----------
