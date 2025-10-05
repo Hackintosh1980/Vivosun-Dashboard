@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-🌱 VIVOSUN Setup GUI – Cross-Platform (macOS & Windows)
-"""
-
-import os, re, sys, json, tkinter as tk
+import os
+import re
+import sys
+import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
-import threading, queue, asyncio
+import threading
+import queue
+import asyncio
 
 try:
     from . import config, utils, icon_loader, gui
@@ -23,9 +22,10 @@ def run_setup():
     root.geometry("600x800")
     root.configure(bg=config.BG)
 
+    # Icon für Fenster + Dock setzen
     icon_loader.set_app_icon(root)
 
-    # ---------- HEADER ----------
+    # ---------- TITLE ----------
     title = tk.Label(
         root,
         text="🌱 VIVOSUN Thermo Setup Tool",
@@ -35,20 +35,29 @@ def run_setup():
     )
     title.pack(pady=(15, 5))
 
+    # ---------- LOGO ----------
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     logo_path = os.path.join(assets_dir, "setup.png")
+
     if os.path.exists(logo_path):
-        img = Image.open(logo_path).resize((100, 100), Image.LANCZOS)
+        img = Image.open(logo_path).resize((480, 360), Image.LANCZOS)
         logo_img = ImageTk.PhotoImage(img)
         logo_label = tk.Label(root, image=logo_img, bg=config.BG)
         logo_label.image = logo_img
         logo_label.pack(pady=10)
 
-    # ---------- TEXT BOX ----------
-    text = tk.Text(root, width=75, height=15, bg="#071116", fg="#bff5c9", font=("Consolas", 10))
+    # ---------- TEXTFELD ----------
+    text = tk.Text(
+        root,
+        width=75,
+        height=15,
+        bg="#071116",
+        fg="#bff5c9",
+        font=("Consolas", 10)
+    )
     text.pack(padx=10, pady=10)
 
-    # ---------- DEVICE LIST ----------
+    # ---------- GERÄTE-LISTE ----------
     list_frame = tk.Frame(root, bg=config.CARD)
     list_frame.pack(fill="x", padx=10, pady=(0, 10))
 
@@ -66,8 +75,8 @@ def run_setup():
     devices = []
     result_queue = queue.Queue()
 
-    def add_device_to_list(device_id, name):
-        device_listbox.insert(tk.END, f"⚪ {device_id}  |  {name}")
+    def add_device_to_list(device_id):
+        device_listbox.insert(tk.END, f"⚪ {device_id}")
 
     # ---------- SAVE ----------
     def save_selected():
@@ -76,20 +85,27 @@ def run_setup():
             text.insert("end", "❌ Kein Gerät ausgewählt!\n")
             return
 
-        selected_line = device_listbox.get(sel[0])
-        selected_id = selected_line.split("|")[0].replace("⚪", "").replace("🟢", "").strip()
-
+        selected_id = device_listbox.get(sel[0]).replace("⚪ ", "").replace("🟢 ", "")
         cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
         cfg["device_id"] = selected_id
 
-        use_celsius = messagebox.askyesno("Unit Selection", "Möchten Sie Celsius verwenden?\n\nYes = °C, No = °F")
+        use_celsius = messagebox.askyesno(
+            "Unit Selection",
+            "Möchten Sie Celsius verwenden?\n\nYes = °C, No = °F"
+        )
         cfg["unit_celsius"] = use_celsius
 
         utils.safe_write_json(config.CONFIG_FILE, cfg)
-        text.insert("end", f"💾 Saved Device-ID {selected_id} and unit_celsius={use_celsius} in config.json\n")
+        text.insert(
+            "end",
+            f"💾 Saved Device-ID {selected_id} and unit_celsius={use_celsius} in config.json\n"
+        )
         text.see("end")
 
+        # --- Setup schließen ---
         root.destroy()
+
+        # --- Dashboard sofort starten ---
         gui.run_app(selected_id)
 
     # ---------- SCAN ----------
@@ -107,19 +123,7 @@ def run_setup():
                 else:
                     out = []
                     for d in found:
-                        name = (getattr(d, "name", "") or "").strip()
-                        addr = getattr(d, "address", None) or getattr(d, "identifier", None)
-                        if not name or not addr:
-                            continue
-                        # akzeptiere Vivosun & ThermoBeacon
-                        if not any(x in name.lower() for x in ("vivosun", "thermobeacon")):
-                            continue
-                        # Plattformabhängige ID
-                        if sys.platform.startswith("win"):
-                            device_id = addr
-                        else:
-                            device_id = getattr(d, "identifier", addr)
-                        out.append(f"{device_id}  |  {name}")
+                        out.append(str(d))
                     result_queue.put("\n".join(out))
             except Exception as e:
                 result_queue.put(f"❌ Fehler beim Scan: {e}")
@@ -144,16 +148,11 @@ def run_setup():
         devices = []
         device_listbox.delete(0, tk.END)
 
-        # Erkenne UUID oder MAC
-        uuid_pattern = r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}"
-        mac_pattern = r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}"
         for line in output.splitlines():
-            match = re.search(f"({uuid_pattern}|{mac_pattern})", line, re.IGNORECASE)
+            match = re.search(r"([0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12})", line)
             if match:
-                dev_id = match.group(1)
-                name = line.split("|")[-1].strip() if "|" in line else "Device"
-                devices.append(dev_id)
-                add_device_to_list(dev_id, name)
+                devices.append(match.group(1))
+                add_device_to_list(match.group(1))
 
         if not devices:
             text.insert("end", "⚠️ Keine gültigen Device-IDs gefunden.\n")
@@ -245,7 +244,7 @@ def run_setup():
 
     footer_label = tk.Label(
         footer,
-        text="📟 VIVOSUN Setup Tool v2.2 (Cross-Platform)",
+        text="📟 VIVOSUN Setup Tool v2.1 (Scanner API)",
         bg=config.CARD,
         fg=config.TEXT,
         font=("Segoe UI", 12)
@@ -253,7 +252,10 @@ def run_setup():
     footer_label.pack(side="right", padx=10)
 
     poll_queue()
+
+    # Icon final setzen (falls Widgets es überschreiben)
     icon_loader.set_app_icon(root)
+
     root.mainloop()
 
 
