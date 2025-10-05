@@ -1,1 +1,0 @@
-# vivosun_app package
