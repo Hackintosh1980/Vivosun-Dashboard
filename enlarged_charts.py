@@ -53,33 +53,51 @@ def open_window(parent, config, utils,
     )
     title_label.pack(side="left", anchor="center")
 
+
+
     # ---------- MATPLOTLIB ----------
     fig, ax = plt.subplots(figsize=(10, 5), facecolor=config.BG)
     ax.set_facecolor("#121a24")
-    ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
-    ax.tick_params(axis="y", labelcolor=config.TEXT)
     ax.grid(True, linestyle="--", alpha=0.3)
-
-    line, = ax.plot([], [], color=color, linewidth=2.2, alpha=0.95, zorder=1)
-
-    # große Wertanzeige im Plot
-    value_label = ax.text(
-        0.02, 0.98, "--",
-        transform=ax.transAxes,
-        color=color,
-        fontsize=40,
-        weight="bold",
-        va="top", ha="left",
-        path_effects=[path_effects.withStroke(linewidth=6, foreground="black")],
-        zorder=5
-    )
-
+    ax.tick_params(axis="y", labelcolor=config.TEXT)
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
     ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0)
 
+    # Titel wie im Dashboard, kräftig über dem Wert
+    ax.set_title(
+        title,
+        color=color,
+        fontsize=20,
+        weight="bold",
+        pad=12,
+        loc="left",
+    )
+    ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
+
+    # Datenlinie
+    line, = ax.plot([], [], color=color, linewidth=2.2, alpha=0.95, zorder=1)
+
+    # Wert direkt unter dem Titel (enger zusammen)
+    value_label = ax.text(
+        0.02, 0.945,  # y-Wert etwas höher
+        "--",
+        transform=ax.transAxes,
+        color=color,
+        fontsize=40,
+        weight="bold",
+        va="top",
+        ha="left",
+        path_effects=[path_effects.withStroke(linewidth=6, foreground="black")],
+        zorder=5,
+    )
+
     canvas = FigureCanvasTkAgg(fig, master=win)
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
+
+
+
+
 
     # ---------- STEUERLEISTE ----------
     ctrl = tk.Frame(win, bg=config.CARD)
