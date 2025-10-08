@@ -39,6 +39,20 @@ STATUS_FILE = resource_path(getattr(config, "STATUS_FILE", "status.json"))
 
 
 # -------------------------------------------------------------------
+# Logging-Schutz
+# -------------------------------------------------------------------
+def _safe_log(callback, msg):
+    """Ruft log_callback sicher auf (ignoriert zerstörte GUI oder Tk-Fehler)."""
+    if not callable(callback):
+        return
+    try:
+        callback(msg)
+    except Exception:
+        # Wenn das Fenster zerstört ist, einfach still abbrechen
+        pass
+
+
+# -------------------------------------------------------------------
 # Hilfsfunktion: Fake-Werte erkennen
 # -------------------------------------------------------------------
 def sanitize(value):
@@ -68,8 +82,7 @@ async def _read_loop(device_id, log_callback=None):
     while _running:
         try:
             async with VivosunThermoClient(device_id) as client:
-                if log_callback:
-                    log_callback(f"✅ Connected to device {device_id}")
+                _safe_log(log_callback, f"✅ Connected to device {device_id}")
                 utils.safe_write_json(STATUS_FILE, {"connected": True, "sensor_ok": True})
 
                 while _running:
@@ -83,11 +96,9 @@ async def _read_loop(device_id, log_callback=None):
                         # --- Sensorstatus prüfen ---
                         sensor_ok = not all(v is None for v in [t_main, h_main, t_ext, h_ext])
                         if not sensor_ok:
-                            if log_callback:
-                                log_callback("⚠️ Sensor not connected or invalid readings (0.0–0.2)")
+                            _safe_log(log_callback, "⚠️ Sensor not connected or invalid readings (0.0–0.2)")
                             utils.safe_write_json(STATUS_FILE, {"connected": True, "sensor_ok": False})
-
-                            # Dummy-Snapshot schreiben, damit GUI stabil bleibt
+                            # Dummy-Snapshot schreiben
                             utils.safe_write_json(resource_path(config.DATA_FILE), {
                                 "timestamp": datetime.datetime.utcnow().isoformat(),
                                 "t_main": None,
@@ -96,7 +107,7 @@ async def _read_loop(device_id, log_callback=None):
                                 "h_ext": None,
                             })
                             await asyncio.sleep(getattr(config, "SCAN_INTERVAL", 5))
-                            continue  # nächster Loop-Durchgang
+                            continue
 
                         # --- Payload normal ---
                         ts = datetime.datetime.utcnow().isoformat()
@@ -112,8 +123,7 @@ async def _read_loop(device_id, log_callback=None):
                         try:
                             utils.safe_write_json(resource_path(config.DATA_FILE), payload)
                         except Exception as e:
-                            if log_callback:
-                                log_callback(f"⚠️ Snapshot write failed: {e}")
+                            _safe_log(log_callback, f"⚠️ Snapshot write failed: {e}")
 
                         # --- CSV Logging (GrowHub kompatibel) ---
                         try:
@@ -128,29 +138,25 @@ async def _read_loop(device_id, log_callback=None):
                                 [ts_str, t, h, vpd],
                             )
                         except Exception as e:
-                            if log_callback:
-                                log_callback(f"⚠️ Append CSV failed: {e}")
+                            _safe_log(log_callback, f"⚠️ Append CSV failed: {e}")
 
                         # --- Status als aktiv und Sensor OK ---
                         utils.safe_write_json(STATUS_FILE, {"connected": True, "sensor_ok": True})
 
                     except Exception as e:
-                        if log_callback:
-                            log_callback(f"⚠️ Device read error → reconnecting: {e}\n{traceback.format_exc()}")
+                        _safe_log(log_callback, f"⚠️ Device read error → reconnecting: {e}\n{traceback.format_exc()}")
                         utils.safe_write_json(STATUS_FILE, {"connected": False, "sensor_ok": False})
-                        break  # beendet die innere while-Schleife
+                        break
 
                     await asyncio.sleep(getattr(config, "SCAN_INTERVAL", 5))
 
         except Exception as e:
-            if log_callback:
-                log_callback(f"❌ Could not connect: {e}\n{traceback.format_exc()}")
+            _safe_log(log_callback, f"❌ Could not connect: {e}\n{traceback.format_exc()}")
             utils.safe_write_json(STATUS_FILE, {"connected": False, "sensor_ok": False})
 
         # --- Reconnect-Delay ---
         delay = getattr(config, "RECONNECT_DELAY", 10)
-        if log_callback:
-            log_callback(f"🔄 Reconnecting in {delay}s ...")
+        _safe_log(log_callback, f"🔄 Reconnecting in {delay}s ...")
         await asyncio.sleep(delay)
 
 
@@ -167,7 +173,10 @@ def start_reader_thread(device_id, log_callback=None):
     def runner():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(_read_loop(device_id, log_callback))
+        try:
+            loop.run_until_complete(_read_loop(device_id, log_callback))
+        finally:
+            loop.close()
 
     _thread = threading.Thread(target=runner, daemon=True)
     _thread.start()
@@ -177,7 +186,10 @@ def stop_reader():
     """Beendet den Reader-Loop."""
     global _running
     _running = False
-    utils.safe_write_json(STATUS_FILE, {"connected": False, "sensor_ok": False})
+    try:
+        utils.safe_write_json(STATUS_FILE, {"connected": False, "sensor_ok": False})
+    except Exception:
+        pass
 
 
 # -------------------------------------------------------------------

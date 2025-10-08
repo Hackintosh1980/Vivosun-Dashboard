@@ -186,10 +186,22 @@ def run_app(device_id=None):
     logbox.pack(fill="x", padx=8, pady=4)
 
     def log(msg):
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logbox.insert("end", f"[{ts}] {msg}\n")
-        logbox.see("end")
-        print(f"[{ts}] {msg}")
+        """Thread-safe logging auch nach GUI-Close geschützt."""
+        if not root.winfo_exists():
+            return  # GUI schon zu → nichts mehr tun
+        def _safe_insert():
+            try:
+                ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                logbox.insert("end", f"[{ts}] {msg}\n")
+                logbox.see("end")
+                print(f"[{ts}] {msg}")
+            except tk.TclError:
+                # Fenster oder Textfeld zerstört
+                pass
+        try:
+            root.after(0, _safe_insert)
+        except tk.TclError:
+            pass
 
     # ---------- BUTTON FUNKTIONEN ----------
     def reset_charts():
@@ -581,8 +593,76 @@ def run_app(device_id=None):
     # --- Update-Loop starten ---
     update_data()
 
-    # --- Icon final noch einmal setzen (falls Toolbar es überschrieben hat) ---
+# --- Icon final noch einmal setzen ---
     icon_loader.set_app_icon(root)
 
+    # ---------- CLEAN EXIT HANDLING ----------
+    _destroyed = [False]
+    _after_ids = set()
+
+    def safe_after(ms, func):
+        """root.after mit automatischem Abbruch bei Fenster-Schließung"""
+        if _destroyed[0]:
+            return
+        try:
+            aid = root.after(ms, func)
+            _after_ids.add(aid)
+            return aid
+        except tk.TclError:
+            pass
+
+    def cancel_all_after():
+        """Alle geplanten after() stoppen"""
+        for aid in list(_after_ids):
+            try:
+                root.after_cancel(aid)
+            except Exception:
+                pass
+        _after_ids.clear()
+
+    def on_close():
+        """Wird beim Fenster-Schließen aufgerufen"""
+        _destroyed[0] = True
+        cancel_all_after()
+        async_reader.stop_reader()
+        try:
+            if hasattr(root, "ani"):
+                root.ani.event_source.stop()
+        except Exception:
+            pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
+
+    # ---------- Sichere Wrapper für Loops ----------
+    def safe_update_data():
+        if _destroyed[0]:
+            return
+        try:
+            update_data()
+        except Exception as e:
+            print("⚠️ update_data error:", e)
+        safe_after(int(config.UI_POLL_INTERVAL * 1000), safe_update_data)
+
+    def safe_refresh_offset_fields():
+        if _destroyed[0]:
+            return
+        try:
+            refresh_offset_fields()
+        except Exception as e:
+            print("⚠️ refresh_offset_fields error:", e)
+        safe_after(2000, safe_refresh_offset_fields)
+
+    safe_update_data()
+    safe_refresh_offset_fields()
+
     # --- Hauptloop ---
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        _destroyed[0] = True
+        cancel_all_after()
+        async_reader.stop_reader()
