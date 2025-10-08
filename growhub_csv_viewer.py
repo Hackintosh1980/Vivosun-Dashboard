@@ -119,7 +119,7 @@ def open_window(parent, config=None):
         controls,
         text="📂 CSV laden",
         command=lambda: load_csv(),
-        bg="lime", fg="black", font=("Segoe UI", 16, "bold")
+        bg="lime", fg="black", font=("Segoe UI", 13, "bold")
     )
     btn_load.pack(side="left", padx=6)
 
@@ -127,7 +127,7 @@ def open_window(parent, config=None):
         controls,
         text="🔄 Reset Ansicht",
         command=lambda: reset_view(),
-        bg="orange", fg="black", font=("Segoe UI", 16, "bold")
+        bg="orange", fg="black", font=("Segoe UI", 13, "bold")
     )
     btn_reset.pack(side="left", padx=6)
 
@@ -143,7 +143,7 @@ def open_window(parent, config=None):
             bg=card_color,
             fg=text_color,
             selectcolor="lime",
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 13, "bold"),
             command=lambda: update_chart()
         ).pack(side="left", padx=4)
 
