@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 enlarged_charts.py – Vollbild-Chart-Fenster mit echtem Footer-Status-Sync
+und GUI-Design passend zur Hauptansicht
 """
 
 import tkinter as tk
@@ -10,14 +11,16 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.patheffects as path_effects
 from PIL import Image, ImageTk
-import os
 import datetime
+import os
 from footer_widget import create_footer
 
 
 def open_window(parent, config, utils,
                 key, title, color, ylabel,
                 data_buffers, time_buffer, unit_celsius):
+
+    # ---------- Fenster ----------
     win = tk.Toplevel(parent)
     win.title(f"🔍 {title} – Enlarged View")
     win.geometry("1400x900")
@@ -27,8 +30,8 @@ def open_window(parent, config, utils,
     header = tk.Frame(win, bg=config.CARD)
     header.pack(side="top", fill="x", padx=10, pady=8)
 
-    left_frame = tk.Frame(header, bg=config.CARD)
-    left_frame.pack(side="left", padx=6)
+    left = tk.Frame(header, bg=config.CARD)
+    left.pack(side="left", padx=6)
 
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     logo_path = os.path.join(assets_dir, "Logo.png")
@@ -36,78 +39,64 @@ def open_window(parent, config, utils,
         try:
             img = Image.open(logo_path).resize((90, 90), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
-            logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
-            logo_label.image = logo_img
-            logo_label.pack(side="left", padx=(0, 10))
+            lbl = tk.Label(left, image=logo_img, bg=config.CARD)
+            lbl.image = logo_img
+            lbl.pack(side="left", padx=(0, 10))
         except Exception as e:
             print(f"⚠️ Logo konnte nicht geladen werden: {e}")
 
-    title_label = tk.Label(
-        left_frame,
+    tk.Label(
+        left,
         text=f"🌱 Enlarged – {title}",
         bg=config.CARD,
         fg=config.TEXT,
         font=("Segoe UI", 18, "bold"),
         anchor="w",
-        justify="left"
-    )
-    title_label.pack(side="left", anchor="center")
-
-
+    ).pack(side="left", anchor="center")
 
     # ---------- MATPLOTLIB ----------
     fig, ax = plt.subplots(figsize=(10, 5), facecolor=config.BG)
     ax.set_facecolor("#121a24")
     ax.grid(True, linestyle="--", alpha=0.3)
     ax.tick_params(axis="y", labelcolor=config.TEXT)
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
     ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0)
-
-    # Titel wie im Dashboard, kräftig über dem Wert
-    ax.set_title(
-        title,
-        color=color,
-        fontsize=20,
-        weight="bold",
-        pad=12,
-        loc="left",
-    )
     ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
 
-    # Datenlinie
-    line, = ax.plot([], [], color=color, linewidth=2.2, alpha=0.95, zorder=1)
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
 
-    # Wert direkt unter dem Titel (enger zusammen)
+    # Titel & Wert im Plot
+    ax.set_title(title, color=color, fontsize=20, weight="bold", pad=8, loc="left")
+
     value_label = ax.text(
-        0.02, 0.945,  # y-Wert etwas höher
-        "--",
+        0.02, 0.955, "--",
         transform=ax.transAxes,
         color=color,
-        fontsize=40,
+        fontsize=42,
         weight="bold",
-        va="top",
-        ha="left",
+        va="top", ha="left",
         path_effects=[path_effects.withStroke(linewidth=6, foreground="black")],
         zorder=5,
     )
 
+    line, = ax.plot([], [], color=color, linewidth=2.3, alpha=0.95)
+
     canvas = FigureCanvasTkAgg(fig, master=win)
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
+    # ---------- UNTERER BEREICH ----------
+    bottom = tk.Frame(win, bg=config.BG)
+    bottom.pack(side="bottom", fill="x")
 
-
-
-
-    # ---------- STEUERLEISTE ----------
-    ctrl = tk.Frame(win, bg=config.CARD)
-    ctrl.pack(side="bottom", fill="x", pady=6)
+    # --- Steuerleiste ---
+    ctrl = tk.Frame(bottom, bg=config.CARD)
+    ctrl.pack(side="top", fill="x", pady=4)
 
     paused = tk.BooleanVar(value=False)
     xs = []
 
     SPANS_DAYS = {
-        "1m": 1 / 1440,
+        "1m": 1 / 1440,   # 1 Minute
         "15m": 15 / 1440,
         "30m": 30 / 1440,
         "1h": 1 / 24,
@@ -130,10 +119,10 @@ def open_window(parent, config, utils,
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
 
     tk.Label(ctrl, text="⏱ Window:", bg=config.CARD, fg=config.TEXT).pack(side="left", padx=6)
-    window_box = tk.OptionMenu(ctrl, span_choice, *SPANS_DAYS.keys())
-    window_box.config(bg="lime", fg="black", font=("Segoe UI", 10, "bold"), activebackground="lime")
-    window_box["highlightthickness"] = 0
-    window_box.pack(side="left", padx=6)
+    opt = tk.OptionMenu(ctrl, span_choice, *SPANS_DAYS.keys())
+    opt.config(bg="lime", fg="black", font=("Segoe UI", 10, "bold"), activebackground="lime")
+    opt["highlightthickness"] = 0
+    opt.pack(side="left", padx=6)
 
     def toggle_pause():
         paused.set(not paused.get())
@@ -153,6 +142,10 @@ def open_window(parent, config, utils,
     tk.Button(ctrl, text="🔄 Reset View", command=reset_view,
               bg="lime", fg="black", font=("Segoe UI", 10, "bold")).pack(side="left", padx=6)
 
+    # --- Footer ganz unten ---
+    footer = create_footer(bottom, config)
+    footer(False)
+
     # ---------- PAN & ZOOM ----------
     _drag = {"x": None, "xlim": None}
 
@@ -164,8 +157,7 @@ def open_window(parent, config, utils,
         zoom_in = event.step > 0 if hasattr(event, "step") else (event.button == "up")
         factor = 0.9 if zoom_in else 1.1
         width = (cur_hi - cur_lo) * factor
-        left, right = x0 - width / 2, x0 + width / 2
-        ax.set_xlim(left, right)
+        ax.set_xlim(x0 - width / 2, x0 + width / 2)
         canvas.draw_idle()
 
     def on_press(event):
@@ -193,8 +185,8 @@ def open_window(parent, config, utils,
     fig.canvas.mpl_connect("motion_notify_event", on_motion)
     fig.canvas.mpl_connect("button_release_event", on_release)
 
-    # ---------- UPDATE LOOP ----------
-    _prev_span_key = [span_choice.get()]
+    # ---------- UPDATE ----------
+    _prev_span = [span_choice.get()]
 
     def update():
         if paused.get():
@@ -215,15 +207,14 @@ def open_window(parent, config, utils,
         if xs and ys:
             line.set_data(xs, ys)
             span_days = SPANS_DAYS.get(span_choice.get(), 1 / 24)
-            right = xs[-1]
-            left = right - span_days
+            right, left = xs[-1], xs[-1] - span_days
             ax.set_xlim(left, right)
             ax.relim()
             ax.autoscale_view(scalex=False, scaley=True)
 
-            if span_choice.get() != _prev_span_key[0]:
+            if span_choice.get() != _prev_span[0]:
                 apply_locator(span_days)
-                _prev_span_key[0] = span_choice.get()
+                _prev_span[0] = span_choice.get()
 
             latest = ys[-1]
             if latest is not None and not (latest != latest):
@@ -243,14 +234,11 @@ def open_window(parent, config, utils,
     apply_locator(SPANS_DAYS[span_choice.get()])
     update()
 
-    # ---------- FOOTER ----------
-    set_status = create_footer(win, config)
-
+    # ---------- FOOTER UPDATE ----------
     def update_footer():
-        """Alle 3 Sekunden echten Verbindungsstatus prüfen"""
         status = utils.safe_read_json(getattr(config, "STATUS_FILE", "status.json")) or {}
         connected = status.get("connected", False)
-        set_status(connected)
+        footer(connected)
         win.after(3000, update_footer)
 
     update_footer()
