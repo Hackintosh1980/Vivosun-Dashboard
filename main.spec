@@ -1,8 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import sys, os
-
-# --- Version und App-Infos aus config.py ---
 sys.path.insert(0, os.path.abspath("."))   # Projektpfad hinzufügen
 import config
 
@@ -14,35 +12,49 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets/*', 'assets'),        # Icons & PNGs
-        ('config.json', '.'),          # Konfiguration
         ('status.json', '.'),          # Status
         ('thermo_history.csv', '.'),   # Historie
     ],
     hiddenimports=[
-        # Matplotlib Minimal
+        # Matplotlib
         "matplotlib.backends.backend_tkagg",
         "matplotlib.pyplot",
         "matplotlib.dates",
         "matplotlib.patheffects",
+
         # Tkinter
         "tkinter",
+
         # Numpy / Pillow
         "numpy",
         "PIL",
+
         # Pandas für GrowHub CSV
         "pandas",
-        # BLE Vivosun
+
+        # BLE / vivosun
         "vivosun_thermo",
+
+        # interne Module
+        "footer_widget",          # 👈 unser neues Modul
+        "growhub_csv_viewer",
+        "enlarged_charts",
+        "scattered_vpd_chart",
+        "setup_gui",
+        "utils",
+        "async_reader",
+        "icon_loader",
+        "config",
+        "gui",
     ],
     hookspath=[],
     runtime_hooks=[],
     excludes=[
-        # explizit rauswerfen was nicht gebraucht wird
         "matplotlib.tests",
         "mpl_toolkits.tests",
         "tkinter.test",
         "scipy",
-        "torch",   # falls er YOLO-Kram reinziehen will
+        "torch",  # YOLO ausschließen
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -61,7 +73,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,   # True = mit Terminalfenster starten; False = nur App
+    console=False,   # Terminal-Fenster? False = App-only
 )
 
 coll = COLLECT(
