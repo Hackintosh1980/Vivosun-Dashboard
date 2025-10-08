@@ -38,7 +38,7 @@ def run_setup():
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     logo_path = os.path.join(assets_dir, "setup.png")
     if os.path.exists(logo_path):
-        img = Image.open(logo_path).resize((160, 160), Image.LANCZOS)
+        img = Image.open(logo_path).resize((400, 130), Image.LANCZOS)
         logo_img = ImageTk.PhotoImage(img)
         logo_label = tk.Label(root, image=logo_img, bg=config.BG)
         logo_label.image = logo_img
