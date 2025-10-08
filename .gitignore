@@ -2,3 +2,5 @@
 __pycache__/growhub_csv_viewer.cpython-312.pyc
 *.json
 *.csv
+thermo_history.csv
+thermo_history.csv

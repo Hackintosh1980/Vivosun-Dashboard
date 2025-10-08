@@ -357,7 +357,7 @@ def run_app(device_id=None):
 
     fig.canvas.mpl_connect("motion_notify_event", on_motion)
 
-    # ---------- UPDATE LOOP (Snapshot lesen, Status setzen, Buffers füllen) ----------
+# ---------- UPDATE LOOP (Snapshot lesen, Status setzen, Buffers füllen) ----------
     last_update_time = [None]
 
     def update_data():
@@ -365,13 +365,26 @@ def run_app(device_id=None):
         now = datetime.datetime.now()
         time_buffer.append(now)
 
+        # --- Helper zum Bereinigen ---
+        def sanitize(val):
+            """Filtert fehlerhafte oder minimale Werte (z. B. ±0.1 °C / %)."""
+            if val is None:
+                return None
+            try:
+                v = float(val)
+                if -0.2 <= v <= 0.2:
+                    return None
+                return v
+            except Exception:
+                return None
+
         t_main = h_main = t_ext = h_ext = vpd_int = vpd_ext = None
 
         if d:
-            raw_t_main = d.get("t_main")
-            raw_t_ext  = d.get("t_ext")
-            h_main     = d.get("h_main")
-            h_ext      = d.get("h_ext")
+            raw_t_main = sanitize(d.get("t_main"))
+            raw_t_ext  = sanitize(d.get("t_ext"))
+            h_main     = sanitize(d.get("h_main"))
+            h_ext      = sanitize(d.get("h_ext"))
 
             leaf_off = config.leaf_offset_c[0]
             hum_off  = config.humidity_offset[0]
