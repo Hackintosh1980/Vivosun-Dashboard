@@ -1,8 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import sys, os
-
-# --- Version und App-Infos aus config.py ---
 sys.path.insert(0, os.path.abspath("."))
 import config
 
@@ -10,8 +8,15 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=['.'],
-    binaries=[],
+    pathex=[
+        '.',
+        os.path.join(os.getcwd(), 'venv', 'Lib', 'site-packages'),
+    ],
+    binaries=[
+        ('C:\\Users\\Dominik\\AppData\\Local\\Programs\\Python\\Python312\\DLLs\\_tkinter.pyd', '.'),
+        ('C:\\Users\\Dominik\\AppData\\Local\\Programs\\Python\\Python312\\DLLs\\tcl86t.dll', '.'),
+        ('C:\\Users\\Dominik\\AppData\\Local\\Programs\\Python\\Python312\\DLLs\\tk86t.dll', '.'),
+    ],
     datas=[
         ('assets/*', 'assets'),
         ('config.json', '.'),
@@ -28,9 +33,17 @@ a = Analysis(
         "PIL",
         "pandas",
         "vivosun_thermo",
+        "footer_widget",
+        "growhub_csv_viewer",
+        "enlarged_charts",
+        "scattered_vpd_chart",
+        "setup_gui",
+        "utils",
+        "async_reader",
+        "icon_loader",
+        "config",
+        "gui",
     ],
-    hookspath=[],
-    runtime_hooks=[],
     excludes=[
         "matplotlib.tests",
         "mpl_toolkits.tests",
@@ -38,8 +51,6 @@ a = Analysis(
         "scipy",
         "torch",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
     cipher=block_cipher,
 )
 
@@ -55,8 +66,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,       # True = Terminal mit Log, False = GUI only
-    icon='assets/icon.ico',  # dein Windows-Icon hier
+    console=False,
+    icon='assets/icon.ico',
 )
 
 coll = COLLECT(

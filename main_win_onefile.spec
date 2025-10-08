@@ -8,8 +8,15 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=['.'],
-    binaries=[],
+    pathex=[
+        '.',
+        os.path.join(os.getcwd(), 'venv', 'Lib', 'site-packages'),
+    ],
+    binaries=[
+        ('C:\\Users\\Dominik\\AppData\\Local\\Programs\\Python\\Python312\\DLLs\\_tkinter.pyd', '.'),
+        ('C:\\Users\\Dominik\\AppData\\Local\\Programs\\Python\\Python312\\DLLs\\tcl86t.dll', '.'),
+        ('C:\\Users\\Dominik\\AppData\\Local\\Programs\\Python\\Python312\\DLLs\\tk86t.dll', '.'),
+    ],
     datas=[
         ('assets/*', 'assets'),
         ('config.json', '.'),
@@ -26,9 +33,17 @@ a = Analysis(
         "PIL",
         "pandas",
         "vivosun_thermo",
+        "footer_widget",
+        "growhub_csv_viewer",
+        "enlarged_charts",
+        "scattered_vpd_chart",
+        "setup_gui",
+        "utils",
+        "async_reader",
+        "icon_loader",
+        "config",
+        "gui",
     ],
-    hookspath=[],
-    runtime_hooks=[],
     excludes=[
         "matplotlib.tests",
         "mpl_toolkits.tests",
@@ -41,7 +56,6 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# --- ONEFILE EXE ---
 exe = EXE(
     pyz,
     a.scripts,
@@ -52,8 +66,16 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,              # kein Terminalfenster
+    console=False,
     icon='assets/icon.ico',
-    onefile=True,               # <- wichtig: alles in einer Datei
-    runtime_tmpdir=None,        # entpackt automatisch im Temp-Verzeichnis
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    name='VIVOSUN_Dashboard'
 )
