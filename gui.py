@@ -228,11 +228,45 @@ def run_app(device_id=None):
 
     def export_chart():
         try:
-            path = os.path.join(os.getcwd(), "chart_export.png")
-            fig.savefig(path, dpi=150)
-            log(f"💾 Chart exported → {path}")
+            # Zeitstempel im Vivosun-/GrowHub-Stil für Dateiname
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+            path = os.path.join(os.getcwd(), f"chart_export_{timestamp}.csv")
+
+            import csv
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                # Header exakt im GrowHub-kompatiblen Stil
+                writer.writerow([
+                    "Timestamp(30 mins)",
+                    "Inside Temperature(℃)",
+                    "Inside Humidity(%)",
+                    "Inside VPD(kPa)",
+                    "Outside Temperature(℃)",
+                    "Outside Humidity(%)",
+                    "Outside VPD(kPa)",
+                ])
+
+                # Alle Datenzeilen schreiben
+                for i in range(len(time_buffer)):
+                    ts = time_buffer[i].strftime("%Y-%m-%d %H:%M:%S") if i < len(time_buffer) else ""
+                    row = [
+                        ts,
+                        data_buffers["t_main"][i] if i < len(data_buffers["t_main"]) else "",
+                        data_buffers["h_main"][i] if i < len(data_buffers["h_main"]) else "",
+                        data_buffers["vpd_int"][i] if i < len(data_buffers["vpd_int"]) else "",
+                        data_buffers["t_ext"][i] if i < len(data_buffers["t_ext"]) else "",
+                        data_buffers["h_ext"][i] if i < len(data_buffers["h_ext"]) else "",
+                        data_buffers["vpd_ext"][i] if i < len(data_buffers["vpd_ext"]) else "",
+                    ]
+                    writer.writerow(row)
+
+            log(f"💾 CSV exportiert → {path}")
+            log("📈 Format: GrowHub-kompatibel, direkt im CSV-Viewer ladbar")
+
         except Exception as e:
-            log(f"❌ Export failed: {e}")
+            log(f"❌ CSV-Export fehlgeschlagen: {e}")
+
+
 
     def restart_program():
         import sys as _sys
