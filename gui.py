@@ -6,7 +6,7 @@ import sys
 import datetime
 from collections import deque
 import tkinter as tk
-from tkinter import scrolledtext, TclError
+from tkinter import scrolledtext, TclError, filedialog   # <--- filedialog hier ergänzt
 
 import matplotlib
 matplotlib.use("TkAgg")
@@ -226,16 +226,28 @@ def run_app(device_id=None):
         else:
             log("⚠️ config.json not found")
 
+
+
+
     def export_chart():
         try:
-            # Zeitstempel im Vivosun-/GrowHub-Stil für Dateiname
+            # --- Zielordner vom Benutzer auswählen ---
+            export_dir = filedialog.askdirectory(
+                title="Exportziel wählen",
+                mustexist=True,
+            )
+            if not export_dir:
+                log("❌ Export abgebrochen – kein Ordner gewählt")
+                return
+
+            # --- Dateiname im GrowHub/Vivosun-Format ---
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-            path = os.path.join(os.getcwd(), f"chart_export_{timestamp}.csv")
+            filename = f"chart_export_{timestamp}.csv"
+            path = os.path.join(export_dir, filename)
 
             import csv
             with open(path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                # Header exakt im GrowHub-kompatiblen Stil
                 writer.writerow([
                     "Timestamp(30 mins)",
                     "Inside Temperature(℃)",
@@ -246,7 +258,6 @@ def run_app(device_id=None):
                     "Outside VPD(kPa)",
                 ])
 
-                # Alle Datenzeilen schreiben
                 for i in range(len(time_buffer)):
                     ts = time_buffer[i].strftime("%Y-%m-%d %H:%M:%S") if i < len(time_buffer) else ""
                     row = [
