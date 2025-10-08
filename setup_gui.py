@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🌱 VIVOSUN Setup GUI – Cross-Platform (macOS & Windows)
+🌱 VIVOSUN Setup GUI – Compact Cross-Platform Edition
 """
 
-import os, re, sys, json, tkinter as tk
+import os, re, sys, tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
 import threading, queue, asyncio
@@ -20,37 +20,37 @@ from vivosun_thermo import VivosunThermoScanner
 def run_setup():
     root = tk.Tk()
     root.title("🌱 VIVOSUN Setup")
-    root.geometry("600x800")
+    root.geometry("520x720")
+    root.minsize(480, 680)
     root.configure(bg=config.BG)
-
     icon_loader.set_app_icon(root)
 
     # ---------- HEADER ----------
     title = tk.Label(
         root,
-        text="🌱 VIVOSUN Thermo Setup Tool",
+        text="🌱 VIVOSUN Thermo Setup",
         bg=config.BG,
         fg=config.TEXT,
-        font=("Segoe UI", 22, "bold")
+        font=("Segoe UI", 20, "bold")
     )
-    title.pack(pady=(15, 5))
+    title.pack(pady=(12, 5))
 
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
     logo_path = os.path.join(assets_dir, "setup.png")
     if os.path.exists(logo_path):
-        img = Image.open(logo_path).resize((100, 100), Image.LANCZOS)
+        img = Image.open(logo_path).resize((160, 160), Image.LANCZOS)
         logo_img = ImageTk.PhotoImage(img)
         logo_label = tk.Label(root, image=logo_img, bg=config.BG)
         logo_label.image = logo_img
-        logo_label.pack(pady=10)
+        logo_label.pack(pady=6)
 
     # ---------- TEXT BOX ----------
-    text = tk.Text(root, width=75, height=15, bg="#071116", fg="#bff5c9", font=("Consolas", 10))
-    text.pack(padx=10, pady=10)
+    text = tk.Text(root, width=64, height=10, bg="#071116", fg="#bff5c9", font=("Consolas", 9))
+    text.pack(padx=8, pady=8)
 
     # ---------- DEVICE LIST ----------
     list_frame = tk.Frame(root, bg=config.CARD)
-    list_frame.pack(fill="x", padx=10, pady=(0, 10))
+    list_frame.pack(fill="x", padx=10, pady=(0, 8))
 
     device_listbox = tk.Listbox(
         list_frame,
@@ -58,8 +58,8 @@ def run_setup():
         fg=config.TEXT,
         selectbackground="lime",
         selectforeground="black",
-        font=("Segoe UI", 16, "bold"),
-        height=8
+        font=("Segoe UI", 14, "bold"),
+        height=6
     )
     device_listbox.pack(fill="x", padx=5, pady=5)
 
@@ -101,7 +101,7 @@ def run_setup():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 scanner = VivosunThermoScanner()
-                found = loop.run_until_complete(scanner.discover(timeout=60))
+                found = loop.run_until_complete(scanner.discover(timeout=45))
                 if not found:
                     result_queue.put("⚠️ Keine Geräte gefunden.")
                 else:
@@ -111,14 +111,9 @@ def run_setup():
                         addr = getattr(d, "address", None) or getattr(d, "identifier", None)
                         if not name or not addr:
                             continue
-                        # akzeptiere Vivosun & ThermoBeacon
                         if not any(x in name.lower() for x in ("vivosun", "thermobeacon")):
                             continue
-                        # Plattformabhängige ID
-                        if sys.platform.startswith("win"):
-                            device_id = addr
-                        else:
-                            device_id = getattr(d, "identifier", addr)
+                        device_id = getattr(d, "identifier", addr)
                         out.append(f"{device_id}  |  {name}")
                     result_queue.put("\n".join(out))
             except Exception as e:
@@ -126,7 +121,7 @@ def run_setup():
             finally:
                 loop.close()
 
-        text.insert("end", "🔍 Scanning for devices (60s)…\n")
+        text.insert("end", "🔍 Scanning for devices (45s)…\n")
         text.see("end")
         scan_btn.config(state="disabled")
         start_pulse()
@@ -144,11 +139,9 @@ def run_setup():
         devices = []
         device_listbox.delete(0, tk.END)
 
-        # Erkenne UUID oder MAC
-        uuid_pattern = r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}"
-        mac_pattern = r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}"
+        pattern = r"([0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}|(?:[0-9A-F]{2}:){5}[0-9A-F]{2})"
         for line in output.splitlines():
-            match = re.search(f"({uuid_pattern}|{mac_pattern})", line, re.IGNORECASE)
+            match = re.search(pattern, line, re.IGNORECASE)
             if match:
                 dev_id = match.group(1)
                 name = line.split("|")[-1].strip() if "|" in line else "Device"
@@ -169,7 +162,7 @@ def run_setup():
 
     # ---------- BUTTONS ----------
     button_frame = tk.Frame(root, bg=config.CARD)
-    button_frame.pack(pady=10)
+    button_frame.pack(pady=6)
 
     def button_style(master, text, cmd):
         return tk.Button(
@@ -178,19 +171,18 @@ def run_setup():
             command=cmd,
             bg="lime",
             fg="black",
-            font=("Segoe UI", 14, "bold"),
+            font=("Segoe UI", 13, "bold"),
             relief="ridge",
             padx=12, pady=6
         )
 
     scan_btn = button_style(button_frame, "🔍 Scan Devices", scan_devices)
     scan_btn.pack(side="left", padx=8)
-
     button_style(button_frame, "💾 Save Selected", save_selected).pack(side="left", padx=8)
 
-    # ---------- FOOTER ----------
-    footer = tk.Frame(root, bg=config.CARD)
-    footer.pack(side="bottom", fill="x", pady=8)
+    # ---------- PROGRESS (direkt unter Buttons, nicht im Footer) ----------
+    progress_frame = tk.Frame(root, bg=config.CARD)
+    progress_frame.pack(fill="x", pady=8)
 
     style = ttk.Style()
     style.theme_use("default")
@@ -200,22 +192,20 @@ def run_setup():
         background="#00ccff",
         darkcolor="#004466",
         lightcolor="#33ddff",
-        thickness=18
+        thickness=16
     )
 
     progress = ttk.Progressbar(
-        footer,
+        progress_frame,
         orient="horizontal",
         mode="determinate",
-        length=280,
+        length=400,
         style="Pulse.Horizontal.TProgressbar",
         maximum=100
     )
-    progress.pack(side="left", padx=12, pady=4)
+    progress.pack(padx=12, pady=4)
 
-    pulse_running = False
-    pulse_value = 0
-    pulse_dir = 1
+    pulse_running, pulse_value, pulse_dir = False, 0, 1
 
     def start_pulse():
         nonlocal pulse_running, pulse_value, pulse_dir
@@ -235,20 +225,22 @@ def run_setup():
             return
         pulse_value += pulse_dir * 5
         if pulse_value >= 100:
-            pulse_value = 100
-            pulse_dir = -1
+            pulse_value, pulse_dir = 100, -1
         elif pulse_value <= 0:
-            pulse_value = 0
-            pulse_dir = 1
+            pulse_value, pulse_dir = 0, 1
         progress["value"] = pulse_value
         root.after(50, animate_pulse)
 
+    # ---------- FOOTER ----------
+    footer = tk.Frame(root, bg=config.CARD)
+    footer.pack(side="bottom", fill="x", pady=6)
+
     footer_label = tk.Label(
         footer,
-        text="📟 VIVOSUN Setup Tool v2.2 (Cross-Platform)",
+        text="📟 VIVOSUN Setup Tool v2.3 (Cross-Platform Compact)",
         bg=config.CARD,
         fg=config.TEXT,
-        font=("Segoe UI", 12)
+        font=("Segoe UI", 11)
     )
     footer_label.pack(side="right", padx=10)
 

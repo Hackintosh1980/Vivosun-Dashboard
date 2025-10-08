@@ -32,4 +32,4 @@ leaf_offset_c = [0.0]       # Leaf Temp Offset in °C
 humidity_offset = [0.0]     # Humidity Offset in %
 
 # Reconnect-Verhalten
-RECONNECT_DELAY = 10   # Sekunden zwischen den Reconnect-Versuchen
+RECONNECT_DELAY = 2   # Sekunden zwischen den Reconnect-Versuchen
