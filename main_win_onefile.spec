@@ -6,7 +6,6 @@ import config
 
 block_cipher = None
 
-# --- Analysephase: was alles reinkommt ---
 a = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -37,46 +36,24 @@ a = Analysis(
         "scipy",
         "torch",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
     cipher=block_cipher,
 )
 
-# --- Python-Archiv ---
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# --- Executable (eine Datei) ---
+# --- ONEFILE EXE ---
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name="VIVOSUN_Dashboard",
+    name='VIVOSUN_Dashboard',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
-    icon="assets/icon.ico",
-)
-
-# --- Sammelphase (wird bei onefile trotzdem gebraucht!) ---
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    name="VIVOSUN_Dashboard"
-)
-
-# --- Endgültige OneFile-Build ---
-app = BUNDLE(
-    coll,
-    name="VIVOSUN_Dashboard.exe",
-    icon="assets/icon.ico",
-    bundle_identifier=None,
-    onefile=True,                 # <- entscheidend
-    runtime_tmpdir=None,          # entpackt in TEMP
+    console=False,              # kein Terminalfenster
+    icon='assets/icon.ico',
+    onefile=True,               # <- wichtig: alles in einer Datei
+    runtime_tmpdir=None,        # entpackt automatisch im Temp-Verzeichnis
 )
