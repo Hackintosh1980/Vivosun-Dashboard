@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-import os, sys, json
+# -*- coding: utf-8 -*-
 
+import os
+import sys
+import json
+
+# -------------------------------------------------------------
+# Direkt-Start-kompatible Imports (kein Punkt-Prefix nötig)
+# -------------------------------------------------------------
 try:
-    from .gui import run_app
-    from . import config, utils
-    from . import setup_gui
-except ImportError:
     from gui import run_app
-    import config, utils
-    import setup_gui
+    import config, utils, setup_gui
+except ImportError:
+    # Fallback, falls als Paket gestartet wird
+    from .gui import run_app
+    from . import config, utils, setup_gui
 
 
 def main():
@@ -33,7 +39,7 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not delete {os.path.basename(f)}: {e}")
 
-    # --- status.json neu anlegen (damit GUI sauber startet) ---
+    # --- status.json neu anlegen ---
     try:
         with open(config.STATUS_FILE, "w", encoding="utf-8") as f:
             json.dump({"connected": False}, f, indent=2)

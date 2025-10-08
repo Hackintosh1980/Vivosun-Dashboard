@@ -2,16 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import os
-import tkinter as tk
-from tkinter import scrolledtext
+import sys
 import datetime
 from collections import deque
+import tkinter as tk
+from tkinter import scrolledtext, TclError
 
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import (
+    FigureCanvasTkAgg,
+    NavigationToolbar2Tk,
+)
 from matplotlib.animation import FuncAnimation
 import matplotlib.patheffects as path_effects
 from matplotlib.backend_bases import cursors
@@ -21,7 +25,6 @@ try:
     from . import config, utils, async_reader, icon_loader
 except ImportError:
     import config, utils, async_reader, icon_loader
-
 # Footer-Widget einbinden
 try:
     from .footer_widget import create_footer
@@ -31,12 +34,15 @@ except ImportError:
 
 def run_app(device_id=None):
     root = tk.Tk()
-    root.title("🌱 VIVOSUN Thermo Dashboard")
+    root.title(config.APP_DISPLAY if hasattr(config, "APP_DISPLAY") else "🌱 VIVOSUN Thermo Dashboard")
     root.geometry("1600x900")
-    root.configure(bg=config.BG)
+    root.configure(bg=getattr(config, "BG", "#0b1620"))
 
     # Icon für Fenster + Dock setzen
-    icon_loader.set_app_icon(root)
+    try:
+        icon_loader.set_app_icon(root)
+    except Exception:
+        pass
 
     # ---------- HEADER ----------
     from PIL import Image, ImageTk
@@ -87,7 +93,7 @@ def run_app(device_id=None):
 
     leaf_offset_var = tk.DoubleVar(value=config.leaf_offset_c[0])
 
-    def update_leaf_offset(*args):
+    def update_leaf_offset(*_):
         try:
             val = float(leaf_offset_var.get())
             config.leaf_offset_c[0] = val if unit_celsius.get() else val * 5.0 / 9.0
@@ -116,7 +122,7 @@ def run_app(device_id=None):
 
     hum_offset_var = tk.DoubleVar(value=config.humidity_offset[0])
 
-    def update_hum_offset(*args):
+    def update_hum_offset(*_):
         try:
             config.humidity_offset[0] = float(hum_offset_var.get())
         except Exception:
@@ -150,23 +156,21 @@ def run_app(device_id=None):
         fg="black"
     ).pack(side="left", padx=6)
 
-# --- Sync zurück ins GUI ---
-    def refresh_offset_fields():
-        """Einmalige Synchronisierung der Offset-Felder mit den globalen Werten."""
-        if unit_celsius.get():
-            gui_val = config.leaf_offset_c[0]
-        else:
-            gui_val = config.leaf_offset_c[0] * 9.0 / 5.0
+    # --- Sync zurück ins GUI (einmalig; Reschedule macht der Safe-Wrapper unten) ---
+    def refresh_offset_fields_once():
+        try:
+            if unit_celsius.get():
+                gui_val = config.leaf_offset_c[0]
+            else:
+                gui_val = config.leaf_offset_c[0] * 9.0 / 5.0
 
-        if leaf_offset_var.get() != gui_val:
-            leaf_offset_var.set(gui_val)
+            if leaf_offset_var.get() != gui_val:
+                leaf_offset_var.set(gui_val)
 
-        if hum_offset_var.get() != config.humidity_offset[0]:
-            hum_offset_var.set(config.humidity_offset[0])
-
-
-
-
+            if hum_offset_var.get() != config.humidity_offset[0]:
+                hum_offset_var.set(config.humidity_offset[0])
+        except TclError:
+            return
 
     # ---------- HEADER BUTTON ROWS ----------
     button_frame = tk.Frame(header, bg=config.CARD)
@@ -186,22 +190,21 @@ def run_app(device_id=None):
     )
     logbox.pack(fill="x", padx=8, pady=4)
 
+    _app_closing = [False]   # Flag für sauberes Beenden
+
     def log(msg):
-        """Thread-safe logging auch nach GUI-Close geschützt."""
-        if not root.winfo_exists():
-            return  # GUI schon zu → nichts mehr tun
-        def _safe_insert():
-            try:
-                ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                logbox.insert("end", f"[{ts}] {msg}\n")
-                logbox.see("end")
-                print(f"[{ts}] {msg}")
-            except tk.TclError:
-                # Fenster oder Textfeld zerstört
-                pass
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Immer in Konsole
+        print(f"[{ts}] {msg}")
+        # Best-effort GUI
         try:
-            root.after(0, _safe_insert)
-        except tk.TclError:
+            if _app_closing[0]:
+                return
+            if not root or not root.winfo_exists():
+                return
+            logbox.insert("end", f"[{ts}] {msg}\n")
+            logbox.see("end")
+        except Exception:
             pass
 
     # ---------- BUTTON FUNKTIONEN ----------
@@ -274,7 +277,10 @@ def run_app(device_id=None):
 
     # ---------- FOOTER via Widget ----------
     set_status = create_footer(root, config)
-    set_status(False)  # Initialzustand
+    try:
+        set_status(False)  # Initialzustand
+    except Exception:
+        pass
 
     # ---------- DATA BUFFERS ----------
     keys = ["t_main", "h_main", "vpd_int", "t_ext", "h_ext", "vpd_ext"]
@@ -311,73 +317,78 @@ def run_app(device_id=None):
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=12, pady=8)
     NavigationToolbar2Tk(canvas, root).update()
 
-    # Refs, werden in setup_charts() befüllt
     lines = {}
     ax_map = {}
     value_labels = {}
 
     def setup_charts(chart_order):
         """Initialisiert Titles, Achsen und Linien für die übergebene Anordnung."""
-        # alles zurücksetzen
-        lines.clear()
-        ax_map.clear()
-        value_labels.clear()
+        try:
+            lines.clear()
+            ax_map.clear()
+            value_labels.clear()
 
-        for ax in axs.flat:
-            ax.clear()
-            ax.set_visible(False)
+            for ax in axs.flat:
+                ax.clear()
+                ax.set_visible(False)
 
-        for key, ax, title, color, ylabel in chart_order:
-            ax.set_visible(True)
-            ax.set_title(
-                title,
-                color=color,
-                fontsize=14,
-                pad=10,
-                weight="bold",
-                loc="left"
-            )
-            ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
-            ax.tick_params(axis="y", labelcolor=config.TEXT, labelsize=9)
-            ax.set_facecolor("#121a24")
-            ax.grid(True, linestyle="--", alpha=0.25, color="gray")
+            for key, ax, title, color, ylabel in chart_order:
+                ax.set_visible(True)
+                ax.set_title(
+                    title,
+                    color=color,
+                    fontsize=14,
+                    pad=10,
+                    weight="bold",
+                    loc="left"
+                )
+                ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
+                ax.tick_params(axis="y", labelcolor=config.TEXT, labelsize=9)
+                ax.set_facecolor("#121a24")
+                ax.grid(True, linestyle="--", alpha=0.25, color="gray")
 
-            line, = ax.plot([], [], color=color, linewidth=2.5, alpha=0.95, zorder=1)
-            lines[key] = line
-            ax_map[ax] = (key, title, color, ylabel)
+                line, = ax.plot([], [], color=color, linewidth=2.5, alpha=0.95, zorder=1)
+                lines[key] = line
+                ax_map[ax] = (key, title, color, ylabel)
 
-            val_text = ax.text(
-                0.02, 0.98, "--",
-                transform=ax.transAxes,
-                color=color,
-                fontsize=40,
-                weight="bold",
-                va="top", ha="left",
-                path_effects=[path_effects.withStroke(linewidth=5, foreground="black")],
-                zorder=5
-            )
-            value_labels[key] = val_text
+                val_text = ax.text(
+                    0.02, 0.98, "--",
+                    transform=ax.transAxes,
+                    color=color,
+                    fontsize=40,
+                    weight="bold",
+                    va="top", ha="left",
+                    path_effects=[path_effects.withStroke(linewidth=5, foreground="black")],
+                    zorder=5
+                )
+                value_labels[key] = val_text
 
-            locator = mdates.MinuteLocator(interval=15)
-            formatter = mdates.DateFormatter("%H:%M")
-            ax.xaxis.set_major_locator(locator)
-            ax.xaxis.set_major_formatter(formatter)
-            ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0, labelsize=9)
+                locator = mdates.MinuteLocator(interval=15)
+                formatter = mdates.DateFormatter("%H:%M")
+                ax.xaxis.set_major_locator(locator)
+                ax.xaxis.set_major_formatter(formatter)
+                ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0, labelsize=9)
 
-        canvas.draw_idle()
+            fig.autofmt_xdate()
+            canvas.draw_idle()
+        except TclError:
+            return
 
     # Erstmal Full-Layout
     setup_charts(chart_order_full)
 
     # ---------- Umschalt-Button ----------
     def toggle_charts():
-        compact_mode.set(not compact_mode.get())
-        if compact_mode.get():
-            setup_charts(chart_order_compact)
-            log("Switched to Compact Chart View (Internal only)")
-        else:
-            setup_charts(chart_order_full)
-            log("Switched to Full Chart View (Internal + External)")
+        try:
+            compact_mode.set(not compact_mode.get())
+            if compact_mode.get():
+                setup_charts(chart_order_compact)
+                log("Switched to Compact Chart View (Internal only)")
+            else:
+                setup_charts(chart_order_full)
+                log("Switched to Full Chart View (Internal + External)")
+        except TclError:
+            pass
 
     toggle_btn = tk.Button(
         root,
@@ -392,7 +403,7 @@ def run_app(device_id=None):
     # ---------- Klick auf Chart öffnet Enlarged Window ----------
     def on_click(event):
         if event.inaxes in ax_map and event.button == 1:
-            key, title, color, ylabel = ax_map[event.inaxes]
+            key, title_txt, color, ylabel = ax_map[event.inaxes]
             try:
                 import enlarged_charts
                 enlarged_charts.open_window(
@@ -400,7 +411,7 @@ def run_app(device_id=None):
                     config=config,
                     utils=utils,
                     key=key,
-                    title=title,
+                    title=title_txt,
                     color=color,
                     ylabel=ylabel,
                     data_buffers=data_buffers,
@@ -410,21 +421,21 @@ def run_app(device_id=None):
             except Exception as e:
                 log(f"⚠️ Fehler beim Öffnen von enlarged_charts: {e}")
 
-    fig.canvas.mpl_connect("button_press_event", on_click)
-
-    # ---------- Hover-Effekt ----------
     def on_motion(event):
-        if event.inaxes in ax_map:
-            fig.canvas.set_cursor(cursors.HAND)
-        else:
-            fig.canvas.set_cursor(cursors.POINTER)
+        try:
+            if event.inaxes in ax_map:
+                fig.canvas.set_cursor(cursors.HAND)
+            else:
+                fig.canvas.set_cursor(cursors.POINTER)
+        except Exception:
+            pass
 
-    fig.canvas.mpl_connect("motion_notify_event", on_motion)
+    _mpl_cids = []
+    _mpl_cids.append(fig.canvas.mpl_connect("button_press_event", on_click))
+    _mpl_cids.append(fig.canvas.mpl_connect("motion_notify_event", on_motion))
 
     # ---------- UPDATE LOOP (Snapshot lesen, Status setzen, Buffers füllen) ----------
     last_update_time = [None]
-
-    # Auto-Umschaltung: wenn externe Sensoren längere Zeit fehlen → kompakt
     _missing_external_count = [0]
     _missing_threshold = 5  # ~5 Zyklen
 
@@ -435,12 +446,10 @@ def run_app(device_id=None):
 
         # --- Helper zum Bereinigen ---
         def sanitize(val):
-            """Filtert fehlerhafte oder minimale Werte (z. B. ±0.1 °C / %)."""
             if val is None:
                 return None
             try:
                 v = float(val)
-                # NOTE: -0.1 / +0.1 als "kein Messwert" interpretieren
                 if -0.2 <= v <= 0.2:
                     return None
                 return v
@@ -470,7 +479,8 @@ def run_app(device_id=None):
                 last_update_time[0] = now
 
         # --- Status LED Logik über status.json + freshness ---
-        status = utils.safe_read_json(getattr(config, "STATUS_FILE", "status.json")) or {}
+        status_path = getattr(config, "STATUS_FILE", os.path.join(os.path.dirname(__file__), "status.json"))
+        status = utils.safe_read_json(status_path) or {}
         status_connected = status.get("connected", False)
 
         if last_update_time[0] is None:
@@ -480,7 +490,10 @@ def run_app(device_id=None):
             connected = delta < 30
 
         final_connected = connected and status_connected
-        set_status(final_connected)
+        try:
+            set_status(final_connected)
+        except TclError:
+            return
 
         # --- Auto-Compact je nach externen Daten ---
         external_missing_now = (t_ext is None) and (h_ext is None)
@@ -489,15 +502,18 @@ def run_app(device_id=None):
         else:
             _missing_external_count[0] = 0
 
-        if _missing_external_count[0] >= _missing_threshold and not compact_mode.get():
-            compact_mode.set(True)
-            setup_charts(chart_order_compact)
-            log("Auto-switch → Compact (external missing)")
+        try:
+            if _missing_external_count[0] >= _missing_threshold and not compact_mode.get():
+                compact_mode.set(True)
+                setup_charts(chart_order_compact)
+                log("Auto-switch → Compact (external missing)")
 
-        if _missing_external_count[0] == 0 and compact_mode.get() and (t_ext is not None or h_ext is not None):
-            compact_mode.set(False)
-            setup_charts(chart_order_full)
-            log("Auto-switch → Full (external back)")
+            if _missing_external_count[0] == 0 and compact_mode.get() and (t_ext is not None or h_ext is not None):
+                compact_mode.set(False)
+                setup_charts(chart_order_full)
+                log("Auto-switch → Full (external back)")
+        except TclError:
+            return
 
         # --- Buffer füllen ---
         data_buffers["t_main"].append(t_main)
@@ -506,9 +522,6 @@ def run_app(device_id=None):
         data_buffers["t_ext"].append(t_ext)
         data_buffers["h_ext"].append(h_ext)
         data_buffers["vpd_ext"].append(vpd_ext)
-
-        # Nächstes Update planen
-        root.after(int(config.UI_POLL_INTERVAL * 1000), update_data)
 
     # ---------- ANIMATION (bei jedem Frame die Plots & Value-Labels aktualisieren) ----------
     def animate(_):
@@ -520,9 +533,13 @@ def run_app(device_id=None):
         current_chart_order = chart_order_compact if compact_mode.get() else chart_order_full
 
         for key, ax, _, _, _ in current_chart_order:
+            # Falls bei Layoutwechsel noch keine Line existiert:
+            if key not in lines:
+                continue
+
             vals = list(data_buffers[key])
             if not vals:
-                lines.get(key, ax.plot([], [])[0]).set_data([], [])
+                lines[key].set_data([], [])
                 if key in value_labels:
                     value_labels[key].set_text("--")
                 continue
@@ -535,8 +552,7 @@ def run_app(device_id=None):
             else:
                 y = [v if v is not None else float("nan") for v in vals]
 
-            if key in lines:
-                lines[key].set_data(x, y)
+            lines[key].set_data(x, y)
 
             # X-Limits
             if len(x) == 1:
@@ -574,7 +590,10 @@ def run_app(device_id=None):
                     value_labels[key].set_text(label_text)
 
         fig.autofmt_xdate()
-        canvas.draw_idle()
+        try:
+            canvas.draw_idle()
+        except Exception:
+            pass
 
     # --- Animation starten (nach der Definition von animate!) ---
     root.ani = FuncAnimation(
@@ -584,71 +603,106 @@ def run_app(device_id=None):
         cache_frame_data=False
     )
 
-    # --- Reader starten (einmalig) ---
+# --- Reader starten (einmalig) ---
+    import signal
+    from async_reader import start_reader_thread, stop_reader
+
     if not device_id:
         cfg_local = utils.safe_read_json(config.CONFIG_FILE) or {}
         device_id = cfg_local.get("device_id", "SIM_DEVICE")
 
-    async_reader.start_reader_thread(device_id, log)
+    # Startet den Async-Reader (deine originale Version mit Reconnect & Logging)
+    start_reader_thread(device_id, log)
 
-    # --- Update-Loop starten ---
-    update_data()
-
-# --- Icon final noch einmal setzen (falls Toolbar es überschrieben hat) ---
-    icon_loader.set_app_icon(root)
+    # --- Icon final noch einmal setzen (falls Toolbar es überschrieben hat) ---
+    try:
+        icon_loader.set_app_icon(root)
+    except Exception:
+        pass
 
     # ---------- SAUBERES BEENDEN ----------
     _scheduled_tasks = []
 
     def schedule_safe(func, delay_ms):
-        """Wrapper für root.after(), speichert IDs für Abbruch beim Beenden."""
-        if not root.winfo_exists():
+        try:
+            if not root.winfo_exists():
+                return
+            task_id = root.after(delay_ms, func)
+            _scheduled_tasks.append(task_id)
+            return task_id
+        except TclError:
             return
-        task_id = root.after(delay_ms, func)
-        _scheduled_tasks.append(task_id)
-        return task_id
 
     def safe_update_data():
-        """Sicherer Wrapper für update_data()."""
-        if not root.winfo_exists():
+        if _app_closing[0]:
+            return
+        try:
+            if not root.winfo_exists():
+                return
+        except TclError:
             return
         update_data()
         schedule_safe(safe_update_data, int(config.UI_POLL_INTERVAL * 1000))
 
     def safe_refresh_offset_fields():
-        """Sicherer Wrapper für refresh_offset_fields()."""
-        if not root.winfo_exists():
+        if _app_closing[0]:
             return
-        refresh_offset_fields()
+        try:
+            if not root.winfo_exists():
+                return
+        except TclError:
+            return
+        refresh_offset_fields_once()
         schedule_safe(safe_refresh_offset_fields, 2000)
 
     def clean_exit():
-        """Zentraler Exit – wird von Buttons und Fenster-Schließen verwendet."""
+        _app_closing[0] = True
         log("🧹 Programm wird beendet ...")
+
+        try:
+            if hasattr(root, "ani") and root.ani and getattr(root.ani, "event_source", None):
+                root.ani.event_source.stop()
+        except Exception:
+            pass
+
+        try:
+            for cid in list(_mpl_cids):
+                try:
+                    fig.canvas.mpl_disconnect(cid)
+                except Exception:
+                    pass
+            _mpl_cids.clear()
+        except Exception:
+            pass
+
         for task in list(_scheduled_tasks):
             try:
                 root.after_cancel(task)
             except Exception:
                 pass
+        _scheduled_tasks.clear()
+
+        # Reader stoppen
         try:
-            async_reader.stop_reader()
-        except Exception:
-            pass
+            stop_reader()
+        except Exception as e:
+            log(f"Fehler beim Stoppen des Readers: {e}")
+
         try:
             root.destroy()
         except Exception:
             pass
 
+        sys.exit(0)
+
     def on_close():
-        """Wird ausgelöst, wenn man das Fenster (Dock-X) schließt."""
         clean_exit()
 
-    # Ereignisbindung für Fenster-Schließen
     root.protocol("WM_DELETE_WINDOW", on_close)
+    signal.signal(signal.SIGINT, lambda sig, frame: clean_exit())
 
-    # --- Schleifen sicher starten ---
+    refresh_offset_fields_once()
     safe_update_data()
     safe_refresh_offset_fields()
-
-    # --- Hauptloop ---
     root.mainloop()
+
