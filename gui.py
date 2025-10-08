@@ -1,7 +1,12 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
 import tkinter as tk
 from tkinter import scrolledtext
 import datetime
 from collections import deque
+
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -34,7 +39,6 @@ def run_app(device_id=None):
     icon_loader.set_app_icon(root)
 
     # ---------- HEADER ----------
-    import os
     from PIL import Image, ImageTk
     header = tk.Frame(root, bg=config.CARD)
     header.pack(side="top", fill="x", padx=10, pady=8)
@@ -173,6 +177,20 @@ def run_app(device_id=None):
     row2 = tk.Frame(button_frame, bg=config.CARD)
     row2.pack(side="top", pady=2)
 
+    # ---------- LOG ----------
+    logframe = tk.Frame(root, bg=config.BG)
+    logframe.pack(side="bottom", fill="x", pady=6)
+    logbox = scrolledtext.ScrolledText(
+        logframe, height=4, bg="#071116", fg="#bff5c9", font=("Consolas", 9)
+    )
+    logbox.pack(fill="x", padx=8, pady=4)
+
+    def log(msg):
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logbox.insert("end", f"[{ts}] {msg}\n")
+        logbox.see("end")
+        print(f"[{ts}] {msg}")
+
     # ---------- BUTTON FUNKTIONEN ----------
     def reset_charts():
         for buf in data_buffers.values():
@@ -201,10 +219,10 @@ def run_app(device_id=None):
             log(f"❌ Export failed: {e}")
 
     def restart_program():
-        import sys, os
+        import sys as _sys
         log("🔄 Restarting program...")
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
+        python = _sys.executable
+        os.execl(python, python, *_sys.argv)
 
     open_windows = {}
 
@@ -226,7 +244,7 @@ def run_app(device_id=None):
                 open_windows["csv"].lift()
                 return
             import growhub_csv_viewer
-            win = growhub_csv_viewer.open_window(root)
+            win = growhub_csv_viewer.open_window(root, config=config)
             open_windows["csv"] = win
             win.protocol("WM_DELETE_WINDOW", lambda: (open_windows.pop("csv", None), win.destroy()))
         except Exception as e:
@@ -245,20 +263,6 @@ def run_app(device_id=None):
     set_status = create_footer(root, config)
     set_status(False)  # Initialzustand
 
-    # ---------- LOG ----------
-    logframe = tk.Frame(root, bg=config.BG)
-    logframe.pack(side="bottom", fill="x", pady=6)
-    logbox = scrolledtext.ScrolledText(
-        logframe, height=4, bg="#071116", fg="#bff5c9", font=("Consolas", 9)
-    )
-    logbox.pack(fill="x", padx=8, pady=4)
-
-    def log(msg):
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logbox.insert("end", f"[{ts}] {msg}\n")
-        logbox.see("end")
-        print(f"[{ts}] {msg}")
-
     # ---------- DATA BUFFERS ----------
     keys = ["t_main", "h_main", "vpd_int", "t_ext", "h_ext", "vpd_ext"]
     data_buffers = {k: deque(maxlen=config.PLOT_BUFFER_LEN) for k in keys}
@@ -271,7 +275,7 @@ def run_app(device_id=None):
 
     temp_unit = "°C" if unit_celsius.get() else "°F"
 
-    chart_order = [
+    chart_order_full = [
         ("t_main",  axs[0, 0], "Internal Temp",      "tomato",      temp_unit),
         ("h_main",  axs[0, 1], "Internal Humidity",  "deepskyblue", "%"),
         ("vpd_int", axs[0, 2], "Internal VPD",       "lime",        "kPa"),
@@ -280,50 +284,97 @@ def run_app(device_id=None):
         ("vpd_ext", axs[1, 2], "External VPD",       "gold",        "kPa"),
     ]
 
+    chart_order_compact = [
+        ("t_main",  axs[0, 0], "Internal Temp",      "tomato",      temp_unit),
+        ("h_main",  axs[0, 1], "Internal Humidity",  "deepskyblue", "%"),
+        ("vpd_int", axs[0, 2], "Internal VPD",       "lime",        "kPa"),
+    ]
+
+    # Zustand: kompakt / voll
+    compact_mode = tk.BooleanVar(value=False)
+
+    # Matplotlib Canvas ins Tk-Fenster (vor Setup, damit canvas verfügbar ist)
+    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.get_tk_widget().pack(fill="both", expand=True, padx=12, pady=8)
+    NavigationToolbar2Tk(canvas, root).update()
+
+    # Refs, werden in setup_charts() befüllt
     lines = {}
     ax_map = {}
     value_labels = {}
 
-    for key, ax, title, color, ylabel in chart_order:
-        ax.set_title(
-            title,
-            color=color,
-            fontsize=14,
-            pad=10,
-            weight="bold",
-            loc="left"
-        )
-        ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
-        ax.tick_params(axis="y", labelcolor=config.TEXT, labelsize=9)
-        ax.set_facecolor("#121a24")
-        ax.grid(True, linestyle="--", alpha=0.25, color="gray")
+    def setup_charts(chart_order):
+        """Initialisiert Titles, Achsen und Linien für die übergebene Anordnung."""
+        # alles zurücksetzen
+        lines.clear()
+        ax_map.clear()
+        value_labels.clear()
 
-        line, = ax.plot([], [], color=color, linewidth=2.5, alpha=0.95, zorder=1)
-        lines[key] = line
-        ax_map[ax] = (key, title, color, ylabel)
+        for ax in axs.flat:
+            ax.clear()
+            ax.set_visible(False)
 
-        val_text = ax.text(
-            0.02, 0.98, "--",
-            transform=ax.transAxes,
-            color=color,
-            fontsize=40,
-            weight="bold",
-            va="top", ha="left",
-            path_effects=[path_effects.withStroke(linewidth=5, foreground="black")],
-            zorder=5
-        )
-        value_labels[key] = val_text
+        for key, ax, title, color, ylabel in chart_order:
+            ax.set_visible(True)
+            ax.set_title(
+                title,
+                color=color,
+                fontsize=14,
+                pad=10,
+                weight="bold",
+                loc="left"
+            )
+            ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
+            ax.tick_params(axis="y", labelcolor=config.TEXT, labelsize=9)
+            ax.set_facecolor("#121a24")
+            ax.grid(True, linestyle="--", alpha=0.25, color="gray")
 
-        locator = mdates.MinuteLocator(interval=15)
-        formatter = mdates.DateFormatter("%H:%M")
-        ax.xaxis.set_major_locator(locator)
-        ax.xaxis.set_major_formatter(formatter)
-        ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0, labelsize=9)
+            line, = ax.plot([], [], color=color, linewidth=2.5, alpha=0.95, zorder=1)
+            lines[key] = line
+            ax_map[ax] = (key, title, color, ylabel)
 
-    # Matplotlib Canvas ins Tk-Fenster
-    canvas = FigureCanvasTkAgg(fig, master=root)
-    canvas.get_tk_widget().pack(fill="both", expand=True, padx=12, pady=8)
-    NavigationToolbar2Tk(canvas, root).update()
+            val_text = ax.text(
+                0.02, 0.98, "--",
+                transform=ax.transAxes,
+                color=color,
+                fontsize=40,
+                weight="bold",
+                va="top", ha="left",
+                path_effects=[path_effects.withStroke(linewidth=5, foreground="black")],
+                zorder=5
+            )
+            value_labels[key] = val_text
+
+            locator = mdates.MinuteLocator(interval=15)
+            formatter = mdates.DateFormatter("%H:%M")
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(formatter)
+            ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0, labelsize=9)
+
+        canvas.draw_idle()
+
+    # Erstmal Full-Layout
+    setup_charts(chart_order_full)
+
+    # ---------- Umschalt-Button ----------
+    def toggle_charts():
+        compact_mode.set(not compact_mode.get())
+        if compact_mode.get():
+            setup_charts(chart_order_compact)
+            log("Switched to Compact Chart View (Internal only)")
+        else:
+            setup_charts(chart_order_full)
+            log("Switched to Full Chart View (Internal + External)")
+
+    toggle_btn = tk.Button(
+        root,
+        text="🧭 Toggle Charts (3↔6)",
+        command=toggle_charts,
+        bg="lime",
+        fg="black",
+        font=("Segoe UI", 10, "bold")
+    )
+    toggle_btn.pack(side="bottom", pady=6)
 
     # ---------- Klick auf Chart öffnet Enlarged Window ----------
     def on_click(event):
@@ -348,17 +399,21 @@ def run_app(device_id=None):
 
     fig.canvas.mpl_connect("button_press_event", on_click)
 
-    # ---------- Hover-Effekt für Klickbare Charts ----------
+    # ---------- Hover-Effekt ----------
     def on_motion(event):
         if event.inaxes in ax_map:
-            fig.canvas.set_cursor(cursors.HAND)     # Hand-Cursor
+            fig.canvas.set_cursor(cursors.HAND)
         else:
-            fig.canvas.set_cursor(cursors.POINTER)  # Standard-Pfeil
+            fig.canvas.set_cursor(cursors.POINTER)
 
     fig.canvas.mpl_connect("motion_notify_event", on_motion)
 
-# ---------- UPDATE LOOP (Snapshot lesen, Status setzen, Buffers füllen) ----------
+    # ---------- UPDATE LOOP (Snapshot lesen, Status setzen, Buffers füllen) ----------
     last_update_time = [None]
+
+    # Auto-Umschaltung: wenn externe Sensoren längere Zeit fehlen → kompakt
+    _missing_external_count = [0]
+    _missing_threshold = 5  # ~5 Zyklen
 
     def update_data():
         d = utils.safe_read_json(config.DATA_FILE)
@@ -372,6 +427,7 @@ def run_app(device_id=None):
                 return None
             try:
                 v = float(val)
+                # NOTE: -0.1 / +0.1 als "kein Messwert" interpretieren
                 if -0.2 <= v <= 0.2:
                     return None
                 return v
@@ -413,6 +469,23 @@ def run_app(device_id=None):
         final_connected = connected and status_connected
         set_status(final_connected)
 
+        # --- Auto-Compact je nach externen Daten ---
+        external_missing_now = (t_ext is None) and (h_ext is None)
+        if external_missing_now:
+            _missing_external_count[0] += 1
+        else:
+            _missing_external_count[0] = 0
+
+        if _missing_external_count[0] >= _missing_threshold and not compact_mode.get():
+            compact_mode.set(True)
+            setup_charts(chart_order_compact)
+            log("Auto-switch → Compact (external missing)")
+
+        if _missing_external_count[0] == 0 and compact_mode.get() and (t_ext is not None or h_ext is not None):
+            compact_mode.set(False)
+            setup_charts(chart_order_full)
+            log("Auto-switch → Full (external back)")
+
         # --- Buffer füllen ---
         data_buffers["t_main"].append(t_main)
         data_buffers["h_main"].append(h_main)
@@ -428,26 +501,33 @@ def run_app(device_id=None):
     def animate(_):
         if not time_buffer:
             return
+
         x = mdates.date2num(list(time_buffer))
         unit = "°C" if unit_celsius.get() else "°F"
+        current_chart_order = chart_order_compact if compact_mode.get() else chart_order_full
 
-        for key, ax, _, _, _ in chart_order:
+        for key, ax, _, _, _ in current_chart_order:
             vals = list(data_buffers[key])
             if not vals:
-                lines[key].set_data([], [])
-                value_labels[key].set_text("--")
+                lines.get(key, ax.plot([], [])[0]).set_data([], [])
+                if key in value_labels:
+                    value_labels[key].set_text("--")
                 continue
 
             if key in ("t_main", "t_ext"):
-                y = [(v if v is None else (v if unit_celsius.get() else utils.c_to_f(v))) for v in vals]
+                y = [
+                    (v if v is None else (v if unit_celsius.get() else utils.c_to_f(v)))
+                    for v in vals
+                ]
             else:
                 y = [v if v is not None else float("nan") for v in vals]
 
-            lines[key].set_data(x, y)
+            if key in lines:
+                lines[key].set_data(x, y)
 
             # X-Limits
             if len(x) == 1:
-                ax.set_xlim(x[0] - 1/1440, x[0] + 1/1440)  # ±1 Minute
+                ax.set_xlim(x[0] - 1 / 1440, x[0] + 1 / 1440)  # ±1 Minute
             else:
                 ax.set_xlim(x[0], x[-1])
 
@@ -468,21 +548,22 @@ def run_app(device_id=None):
                     latest = vv
                     break
 
-            if latest is None:
-                value_labels[key].set_text("--")
-            else:
-                if key in ("t_main", "t_ext"):
-                    label_text = f"{latest:.1f} {unit}"
-                elif key.startswith("h_"):
-                    label_text = f"{latest:.1f} %"
+            if key in value_labels:
+                if latest is None:
+                    value_labels[key].set_text("--")
                 else:
-                    label_text = f"{latest:.2f} kPa"
-                value_labels[key].set_text(label_text)
+                    if key in ("t_main", "t_ext"):
+                        label_text = f"{latest:.1f} {unit}"
+                    elif key.startswith("h_"):
+                        label_text = f"{latest:.1f} %"
+                    else:
+                        label_text = f"{latest:.2f} kPa"
+                    value_labels[key].set_text(label_text)
 
         fig.autofmt_xdate()
         canvas.draw_idle()
 
-    # --- Animation starten ---
+    # --- Animation starten (nach der Definition von animate!) ---
     root.ani = FuncAnimation(
         fig, animate,
         interval=int(config.UI_POLL_INTERVAL * 1000),
