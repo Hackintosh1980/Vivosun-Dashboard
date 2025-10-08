@@ -15,6 +15,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.dates as mdates
+from footer_widget import create_footer_light
 
 
 # ---------- Globale Helper ----------
@@ -29,6 +30,7 @@ def _find_time_col(cols):
         return None
     candidates.sort()
     return candidates[0][2]
+
 
 def _parse_ts_series(s):
     s = s.astype(str).str.strip()
@@ -58,7 +60,7 @@ def _parse_ts_series(s):
 _current_csv_window = None
 
 
-def open_window(parent):
+def open_window(parent, config=None):
     global _current_csv_window
     if _current_csv_window is not None and _current_csv_window.winfo_exists():
         _current_csv_window.lift()
@@ -68,7 +70,10 @@ def open_window(parent):
     _current_csv_window = win
     win.title("🌱 GrowHub CSV Viewer")
     win.geometry("1400x900")
-    win.configure(bg="#0f161f")
+    bg_color = getattr(config, "BG", "#0f161f")
+    card_color = getattr(config, "CARD", "#1e2a38")
+    text_color = getattr(config, "TEXT", "white")
+    win.configure(bg=bg_color)
 
     def on_close():
         global _current_csv_window
@@ -77,11 +82,11 @@ def open_window(parent):
 
     win.protocol("WM_DELETE_WINDOW", on_close)
 
-    # ---------- Header mit Logo + Titel ----------
-    header = tk.Frame(win, bg="#1e2a38")
+    # ---------- Header ----------
+    header = tk.Frame(win, bg=card_color)
     header.pack(side="top", fill="x", padx=10, pady=6)
 
-    left_frame = tk.Frame(header, bg="#1e2a38")
+    left_frame = tk.Frame(header, bg=card_color)
     left_frame.pack(side="left", padx=6)
 
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
@@ -90,7 +95,7 @@ def open_window(parent):
         try:
             img = Image.open(logo_path).resize((100, 100), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
-            logo_label = tk.Label(left_frame, image=logo_img, bg="#1e2a38")
+            logo_label = tk.Label(left_frame, image=logo_img, bg=card_color)
             logo_label.image = logo_img
             logo_label.pack(side="left", padx=(0, 10))
         except Exception as e:
@@ -99,15 +104,15 @@ def open_window(parent):
     title = tk.Label(
         left_frame,
         text="🌱 GrowHub CSV Viewer",
-        bg="#1e2a38",
-        fg="white",
+        bg=card_color,
+        fg=text_color,
         font=("Segoe UI", 18, "bold"),
         anchor="w"
     )
     title.pack(side="left", anchor="center")
 
     # ---------- Controls ----------
-    controls = tk.Frame(header, bg="#1e2a38")
+    controls = tk.Frame(header, bg=card_color)
     controls.pack(side="right", pady=2)
 
     btn_load = tk.Button(
@@ -135,7 +140,8 @@ def open_window(parent):
             value=value,
             indicatoron=False,
             width=12,
-            bg="#1e2a38", fg="white",
+            bg=card_color,
+            fg=text_color,
             selectcolor="lime",
             font=("Segoe UI", 16, "bold"),
             command=lambda: update_chart()
@@ -143,12 +149,12 @@ def open_window(parent):
 
     # ---------- Chart ----------
     fig, ax = plt.subplots(figsize=(12, 6))
-    fig.patch.set_facecolor("#0f161f")
+    fig.patch.set_facecolor(bg_color)
     ax.set_facecolor("#121a24")
-    ax.tick_params(colors="white")
-    ax.xaxis.label.set_color("white")
-    ax.yaxis.label.set_color("white")
-    ax.title.set_color("white")
+    ax.tick_params(colors=text_color)
+    ax.xaxis.label.set_color(text_color)
+    ax.yaxis.label.set_color(text_color)
+    ax.title.set_color(text_color)
     ax.grid(True, linestyle="--", alpha=0.4)
 
     canvas = FigureCanvasTkAgg(fig, master=win)
@@ -157,7 +163,7 @@ def open_window(parent):
     df = None
     x_full_range = None
 
-    # ---------- Funktionen ----------
+    # ---------- CSV Funktionen ----------
     def load_csv():
         nonlocal df, x_full_range
         path = filedialog.askopenfilename(
@@ -204,7 +210,7 @@ def open_window(parent):
         nonlocal df
         ax.clear()
         if df is None or df.empty:
-            ax.set_title("Keine Daten geladen", color="white")
+            ax.set_title("Keine Daten geladen", color=text_color)
             canvas.draw_idle()
             return
 
@@ -226,8 +232,8 @@ def open_window(parent):
             if outside_hum: ax.plot(times, df[outside_hum], color="cyan", label="Outside Humidity (%)")
             if outside_vpd: ax.plot(times, df[outside_vpd], color="gold", label="Outside VPD (kPa)")
 
-        ax.set_title("GrowHub CSV Data", color="white")
-        ax.legend(facecolor="#0f161f", edgecolor="gray", labelcolor="white")
+        ax.set_title("GrowHub CSV Data", color=text_color)
+        ax.legend(facecolor=bg_color, edgecolor="gray", labelcolor=text_color)
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
         ax.grid(True, linestyle="--", alpha=0.4)
@@ -290,6 +296,9 @@ def open_window(parent):
     fig.canvas.mpl_connect("button_press_event", on_press)
     fig.canvas.mpl_connect("motion_notify_event", on_motion)
     fig.canvas.mpl_connect("button_release_event", on_release)
+
+    # ---------- FOOTER ----------
+    create_footer_light(win, config)
 
     update_chart()
     return win

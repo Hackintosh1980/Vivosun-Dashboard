@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys
+import os, sys, json
 
 try:
     from .gui import run_app
@@ -23,13 +23,23 @@ def main():
         sys.exit(0)
 
     # --- Immer frische Dateien erzeugen ---
-    for f in [config.DATA_FILE, config.HISTORY_FILE]:
+    for f in [config.DATA_FILE, config.HISTORY_FILE, getattr(config, "STATUS_FILE", None)]:
+        if not f:
+            continue
         try:
             if os.path.exists(f):
                 os.remove(f)
-                print(f"🗑 Deleted old file: {f}")
+                print(f"🗑 Deleted old file: {os.path.basename(f)}")
         except Exception as e:
-            print(f"⚠️ Could not delete {f}: {e}")
+            print(f"⚠️ Could not delete {os.path.basename(f)}: {e}")
+
+    # --- status.json neu anlegen (damit GUI sauber startet) ---
+    try:
+        with open(config.STATUS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"connected": False}, f, indent=2)
+        print("📄 New status.json created (connected = False)")
+    except Exception as e:
+        print(f"⚠️ Could not recreate status.json: {e}")
 
     # --- Dashboard starten ---
     print(f"🌱 Starting Dashboard with device {device_id}")

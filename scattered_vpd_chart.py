@@ -14,6 +14,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.colors import ListedColormap
 from PIL import Image, ImageTk
 import os
+from footer_widget import create_footer
 
 try:
     from . import config, utils, icon_loader
@@ -28,14 +29,13 @@ def open_window(parent, config=config, utils=utils):
     icon_loader.link_icon(win, parent)
 
     win.title("🌱 VPD Comfort Chart")
-    win.geometry("1200x800")
+    win.geometry("1200x900")
     win.configure(bg=config.BG)
 
     # ---------- HEADER ----------
     header = tk.Frame(win, bg=config.CARD)
     header.pack(side="top", fill="x", padx=10, pady=8)
 
-    # Container für Logo + Titel nebeneinander
     left_frame = tk.Frame(header, bg=config.CARD)
     left_frame.pack(side="left", padx=6)
 
@@ -139,9 +139,8 @@ def open_window(parent, config=config, utils=utils):
     ax.set_ylabel("Relative Humidity (%)", color=config.TEXT)
     ax.tick_params(colors=config.TEXT)
 
-    # Gitter für VPD
     temps = np.linspace(10, 40, 300)
-    hums  = np.linspace(0, 100, 300)
+    hums = np.linspace(0, 100, 300)
     T, H = np.meshgrid(temps, hums)
 
     def calc_vpd(temp_c, rh):
@@ -170,7 +169,6 @@ def open_window(parent, config=config, utils=utils):
         ax.set_xlabel("Temperature (°F)", color=config.TEXT)
         ax.set_xlim(10, 40)
 
-    # Sensor-Punkte
     internal_dot = ax.scatter([], [], color="lime", edgecolor="black", s=120, label="Internal Sensor")
     external_dot = ax.scatter([], [], color="red", edgecolor="black", s=120, label="External Sensor")
 
@@ -198,7 +196,7 @@ def open_window(parent, config=config, utils=utils):
             return
 
         leaf_off = config.leaf_offset_c[0]
-        hum_off  = config.humidity_offset[0]
+        hum_off = config.humidity_offset[0]
 
         ti, hi = d.get("t_main"), d.get("h_main")
         te, he = d.get("t_ext"), d.get("h_ext")
@@ -235,4 +233,15 @@ def open_window(parent, config=config, utils=utils):
         win.after(3000, update)
 
     update()
+
+    # ---------- FOOTER ----------
+    set_status = create_footer(win, config)
+
+    def sync_status():
+        status = utils.safe_read_json(getattr(config, "STATUS_FILE", "status.json")) or {}
+        set_status(status.get("connected", False))
+        win.after(3000, sync_status)
+
+    sync_status()
+
     return win

@@ -17,6 +17,12 @@ try:
 except ImportError:
     import config, utils, async_reader, icon_loader
 
+# Footer-Widget einbinden
+try:
+    from .footer_widget import create_footer
+except ImportError:
+    from footer_widget import create_footer
+
 
 def run_app(device_id=None):
     root = tk.Tk()
@@ -157,7 +163,7 @@ def run_app(device_id=None):
 
     refresh_offset_fields()
 
-# ---------- HEADER BUTTON ROWS ----------
+    # ---------- HEADER BUTTON ROWS ----------
     button_frame = tk.Frame(header, bg=config.CARD)
     button_frame.pack(side="bottom", fill="x", pady=4)
 
@@ -235,53 +241,9 @@ def run_app(device_id=None):
     tk.Button(row2, text="📊 GrowHub CSV", command=open_growhub_csv).pack(side="left", padx=6)
     tk.Button(row2, text="🔄 Restart Program", command=restart_program).pack(side="left", padx=6)
 
-    # ---------- FOOTER ----------
-    footer = tk.Frame(root, bg=config.CARD)
-    footer.pack(side="bottom", fill="x", padx=10, pady=6)
-
-    # --- Status links ---
-    status_frame = tk.Frame(footer, bg=config.CARD)
-    status_frame.pack(side="left")
-
-    status_led = tk.Canvas(status_frame, width=22, height=22, bg=config.CARD, highlightthickness=0)
-    status_led.pack(side="left", padx=8)
-
-    status_text = tk.Label(
-        status_frame,
-        text="Disconnected",
-        bg=config.CARD,
-        fg="orange",
-        font=("Segoe UI", 11, "bold")
-    )
-    status_text.pack(side="left")
-
-    def set_status(connected=True):
-        status_led.delete("all")
-        if connected:
-            status_led.create_oval(2, 2, 20, 20, fill="lime green", outline="")
-            status_text.config(text="Connected", fg="lime green")
-        else:
-            status_led.create_oval(2, 2, 20, 20, fill="red", outline="")
-            status_text.config(text="Disconnected", fg="red")
-
-    set_status(False)
-
-    # --- Info rechts ---
-    info = tk.Label(
-        footer,
-        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: sormy/vivosun-thermo",
-        bg=config.CARD,
-        fg=config.TEXT,
-        font=("Segoe UI", 11),
-        cursor="hand2"
-    )
-    info.pack(side="right")
-
-    def open_github(event):
-        import webbrowser
-        webbrowser.open("https://github.com/sormy/vivosun-thermo")
-
-    info.bind("<Button-1>", open_github)
+    # ---------- FOOTER via Widget ----------
+    set_status = create_footer(root, config)
+    set_status(False)  # Initialzustand
 
     # ---------- LOG ----------
     logframe = tk.Frame(root, bg=config.BG)
@@ -302,7 +264,7 @@ def run_app(device_id=None):
     data_buffers = {k: deque(maxlen=config.PLOT_BUFFER_LEN) for k in keys}
     time_buffer = deque(maxlen=config.PLOT_BUFFER_LEN)
 
-# ---------- CHARTS ----------
+    # ---------- CHARTS ----------
     fig, axs = plt.subplots(2, 3, figsize=(16, 10), facecolor=config.BG)
     fig.subplots_adjust(hspace=0.6, wspace=0.4, top=0.94, bottom=0.10)
     fig.tight_layout(pad=3.0)
@@ -530,6 +492,3 @@ def run_app(device_id=None):
 
     # --- Hauptloop ---
     root.mainloop()
-
-    
-    

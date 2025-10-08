@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+enlarged_charts.py – Vollbild-Chart-Fenster mit echtem Footer-Status-Sync
+"""
+
 import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
@@ -5,6 +11,8 @@ import matplotlib.dates as mdates
 import matplotlib.patheffects as path_effects
 from PIL import Image, ImageTk
 import os
+import datetime
+from footer_widget import create_footer
 
 
 def open_window(parent, config, utils,
@@ -45,7 +53,7 @@ def open_window(parent, config, utils,
     )
     title_label.pack(side="left", anchor="center")
 
-    # ---------- Matplotlib Setup ----------
+    # ---------- MATPLOTLIB ----------
     fig, ax = plt.subplots(figsize=(10, 5), facecolor=config.BG)
     ax.set_facecolor("#121a24")
     ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
@@ -73,19 +81,14 @@ def open_window(parent, config, utils,
     canvas = FigureCanvasTkAgg(fig, master=win)
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
-    # ---------- Steuerleiste ----------
+    # ---------- STEUERLEISTE ----------
     ctrl = tk.Frame(win, bg=config.CARD)
     ctrl.pack(side="bottom", fill="x", pady=6)
 
     paused = tk.BooleanVar(value=False)
     xs = []
 
-    # Zeitfenster-Auswahl
     SPANS_DAYS = {
-        "1s": 1 / 86400,
-        "3s": 3 / 86400,
-        "10s": 10 / 86400,
-        "30s": 30 / 86400,
         "1m": 1 / 1440,
         "15m": 15 / 1440,
         "30m": 30 / 1440,
@@ -94,33 +97,19 @@ def open_window(parent, config, utils,
         "12h": 12 / 24,
         "24h": 1,
         "1w": 7,
-        "1M": 30,
-        "3M": 90,
     }
     span_choice = tk.StringVar(value="1h")
 
-    def apply_locator(span_days: float) -> None:
-        if span_days <= 30 / 86400:
-            ax.xaxis.set_major_locator(mdates.SecondLocator(interval=5))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-        elif span_days <= 2 / 1440:
-            ax.xaxis.set_major_locator(mdates.SecondLocator(interval=10))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-        elif span_days <= 1 / 24:
+    def apply_locator(span_days: float):
+        if span_days <= 1 / 24:
             ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=5))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
         elif span_days <= 1:
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        elif span_days <= 7:
+        else:
             ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
-        elif span_days <= 31:
-            ax.xaxis.set_major_locator(mdates.DayLocator(interval=2))
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
-        else:
-            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-            ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
 
     tk.Label(ctrl, text="⏱ Window:", bg=config.CARD, fg=config.TEXT).pack(side="left", padx=6)
     window_box = tk.OptionMenu(ctrl, span_choice, *SPANS_DAYS.keys())
@@ -128,7 +117,6 @@ def open_window(parent, config, utils,
     window_box["highlightthickness"] = 0
     window_box.pack(side="left", padx=6)
 
-    # Pause / Reset
     def toggle_pause():
         paused.set(not paused.get())
         btn_pause.config(text="▶ Resume" if paused.get() else "⏸ Pause")
@@ -147,7 +135,7 @@ def open_window(parent, config, utils,
     tk.Button(ctrl, text="🔄 Reset View", command=reset_view,
               bg="lime", fg="black", font=("Segoe UI", 10, "bold")).pack(side="left", padx=6)
 
-    # ---------- Pan & Zoom ----------
+    # ---------- PAN & ZOOM ----------
     _drag = {"x": None, "xlim": None}
 
     def on_scroll(event):
@@ -187,7 +175,7 @@ def open_window(parent, config, utils,
     fig.canvas.mpl_connect("motion_notify_event", on_motion)
     fig.canvas.mpl_connect("button_release_event", on_release)
 
-    # ---------- Update Loop ----------
+    # ---------- UPDATE LOOP ----------
     _prev_span_key = [span_choice.get()]
 
     def update():
@@ -236,4 +224,17 @@ def open_window(parent, config, utils,
 
     apply_locator(SPANS_DAYS[span_choice.get()])
     update()
+
+    # ---------- FOOTER ----------
+    set_status = create_footer(win, config)
+
+    def update_footer():
+        """Alle 3 Sekunden echten Verbindungsstatus prüfen"""
+        status = utils.safe_read_json(getattr(config, "STATUS_FILE", "status.json")) or {}
+        connected = status.get("connected", False)
+        set_status(connected)
+        win.after(3000, update_footer)
+
+    update_footer()
+
     return win
