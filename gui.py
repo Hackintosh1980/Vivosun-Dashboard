@@ -531,22 +531,6 @@ def run_app(device_id=None):
                 last_update_time[0] = now
 
         
-        # --- Status LED Logik über status.json + freshness ---
-        status = utils.safe_read_json(config.STATUS_FILE) or {}
-        status_connected = status.get("connected", False)
-
-        if last_update_time[0] is None:
-            connected = False
-        else:
-            delta = (now - last_update_time[0]).total_seconds()
-            connected = delta < 30
-
-        final_connected = connected and status_connected
-        try:
-            set_status(final_connected)
-        except TclError:
-            return
-
         
         # --- Auto-Compact je nach externen Daten ---
         external_missing_now = (t_ext is None) and (h_ext is None)
