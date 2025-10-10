@@ -1,22 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+main.py – Startpunkt für das 🌱 VIVOSUN Thermo Dashboard
+"""
 
 import os
 import sys
 import json
 
 # -------------------------------------------------------------
-# Direkt-Start-kompatible Imports (kein Punkt-Prefix nötig)
+# Setup: Arbeitsverzeichnis & Pfade sicherstellen
 # -------------------------------------------------------------
-try:
-    from gui import run_app
-    import config, utils, setup_gui
-except ImportError:
-    # Fallback, falls als Paket gestartet wird
-    from .gui import run_app
-    from . import config, utils, setup_gui
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+# -------------------------------------------------------------
+# Imports (neue Paketstruktur)
+# -------------------------------------------------------------
+from main_gui.gui import run_app
+import config
+import utils
+
+# -------------------------------------------------------------
+# App-Start
+# -------------------------------------------------------------
+if __name__ == "__main__":
+    run_app()
 
 
+    
 def main():
     # --- Config prüfen ---
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}

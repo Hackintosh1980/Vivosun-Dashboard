@@ -5,6 +5,8 @@ scattered_vpd_chart.py – VPD Comfort Chart Fenster
 Zeigt VPD-Zonen (Contour) + interne/externe Sensorpunkte.
 """
 
+import os
+import sys
 import tkinter as tk
 import numpy as np
 import matplotlib
@@ -13,13 +15,13 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.colors import ListedColormap
 from PIL import Image, ImageTk
-import os
-from footer_widget import create_footer
 
-try:
-    from . import config, utils, icon_loader
-except ImportError:
-    import config, utils, icon_loader
+# Pfade korrigieren, damit Module im Projekt gefunden werden
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from widgets.footer_widget import create_footer, create_footer_light
+import config, utils, icon_loader
 
 
 def open_window(parent, config=config, utils=utils):
@@ -234,14 +236,13 @@ def open_window(parent, config=config, utils=utils):
 
     update()
 
+
     # ---------- FOOTER ----------
-    set_status = create_footer(win, config)
-
-    def sync_status():
-        status = utils.safe_read_json(getattr(config, "STATUS_FILE", "status.json")) or {}
-        set_status(status.get("connected", False))
-        win.after(3000, sync_status)
-
-    sync_status()
+    try:
+        create_footer(win, config)
+    except Exception:
+        pass
 
     return win
+
+ 

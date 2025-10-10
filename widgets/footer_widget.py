@@ -8,7 +8,8 @@ Erzeugt Status-LED + Info-Link, Rückgabe: (set_status, poll_status)
 import tkinter as tk
 import webbrowser
 import datetime
-import utils, config   # 🆕 wir brauchen Zugriff auf status.json
+import utils, config
+
 
 def create_footer(parent, config):
     footer = tk.Frame(parent, bg=config.CARD)
@@ -30,11 +31,9 @@ def create_footer(parent, config):
     )
     status_text.pack(side="left")
 
-    # interner Zeitstempel 🆕
     last_update_time = [None]
 
     def set_status(connected=True):
-        """Extern aufrufbar: LED direkt setzen"""
         status_led.delete("all")
         if connected:
             status_led.create_oval(2, 2, 20, 20, fill="lime green", outline="")
@@ -45,9 +44,7 @@ def create_footer(parent, config):
 
     set_status(False)
 
-    # 🆕 --- Automatische LED-Logik über status.json + freshness ---
     def poll_status():
-        """Wird periodisch aufgerufen (z. B. alle 2 s)"""
         now = datetime.datetime.now()
         status = utils.safe_read_json(config.STATUS_FILE) or {}
         status_connected = status.get("connected", False)
@@ -61,17 +58,13 @@ def create_footer(parent, config):
         final_connected = connected and status_connected
         set_status(final_connected)
 
-        # nächste Prüfung planen (Tkinter-Loop)
         parent.after(2000, poll_status)
 
     def mark_data_update():
-        """Von der GUI aufrufen, wenn neue Sensordaten eintreffen."""
         last_update_time[0] = datetime.datetime.now()
 
-    # 🆕 Erste Poll-Runde starten
     parent.after(2000, poll_status)
 
-    # ---------- INFO RECHTS ----------
     info = tk.Label(
         footer,
         text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: sormy/vivosun-thermo",
@@ -87,5 +80,32 @@ def create_footer(parent, config):
 
     info.bind("<Button-1>", open_github)
 
-    # 🆕 Wir geben jetzt 2 Funktionen zurück:
     return set_status, mark_data_update
+
+
+def create_footer_light(parent, config=None):
+    """
+    Kleiner Footer ohne Statusanzeige – nur Version & GitHub-Link.
+    """
+    bg = getattr(config, "CARD", "#1e2a38")
+    fg = getattr(config, "TEXT", "white")
+
+    footer = tk.Frame(parent, bg=bg)
+    footer.pack(side="bottom", fill="x", padx=10, pady=6)
+
+    info = tk.Label(
+        footer,
+        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: sormy/vivosun-thermo",
+        bg=bg,
+        fg=fg,
+        font=("Segoe UI", 11),
+        cursor="hand2"
+    )
+    info.pack(side="right")
+
+    def open_github(event):
+        webbrowser.open("https://github.com/sormy/vivosun-thermo")
+
+    info.bind("<Button-1>", open_github)
+
+    return footer

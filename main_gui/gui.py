@@ -1,36 +1,58 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+gui.py – Haupt-GUI für das 🌱 VIVOSUN Thermo Dashboard
+"""
 
 import os
 import sys
 import datetime
 from collections import deque
 import tkinter as tk
-from tkinter import scrolledtext, TclError, filedialog   # <--- filedialog hier ergänzt
+from tkinter import scrolledtext, TclError, filedialog
 
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.backends.backend_tkagg import (
-    FigureCanvasTkAgg,
-    NavigationToolbar2Tk,
-)
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.animation import FuncAnimation
 import matplotlib.patheffects as path_effects
 from matplotlib.backend_bases import cursors
 
-# Robust: Direktstart & Paketstart
-try:
-    from . import config, utils, async_reader, icon_loader
-except ImportError:
-    import config, utils, async_reader, icon_loader
-# Footer-Widget einbinden
-try:
-    from .footer_widget import create_footer
-except ImportError:
-    from footer_widget import create_footer
+# -------------------------------------------------------------
+# Feste Imports – keine relativen, keine verschachtelten Packages
+# -------------------------------------------------------------
+# Imports & Widgets
+# -------------------------------------------------------------
+import config
+import utils
+import async_reader
+import icon_loader
 
+import widgets.footer_widget as footer_widget
+import widgets.enlarged_charts as enlarged_charts
+import widgets.growhub_csv_viewer as growhub_csv_viewer
+import widgets.scattered_vpd_chart as scattered_vpd_chart
+
+
+# -------------------------------------------------------------
+# Safe-Wrapper für Widget-Funktionen
+# -------------------------------------------------------------
+def safe_get(module, func_name):
+    try:
+        return getattr(module, func_name)
+    except Exception:
+        def _missing(*a, **kw):
+            from tkinter import messagebox
+            messagebox.showinfo("Info", f"{func_name} ist noch nicht verfügbar.")
+        return _missing
+
+
+create_footer         = safe_get(footer_widget, "create_footer")
+open_enlarged_charts  = safe_get(enlarged_charts, "open_enlarged_charts")
+open_growhub_viewer   = safe_get(growhub_csv_viewer, "open_growhub_viewer")
+open_scattered_vpd    = safe_get(scattered_vpd_chart, "open_scattered_vpd")
 
 def run_app(device_id=None):
     root = tk.Tk()
@@ -38,14 +60,9 @@ def run_app(device_id=None):
     root.geometry("1600x900")
     root.configure(bg=getattr(config, "BG", "#0b1620"))
 
-    # Icon für Fenster + Dock setzen
-    try:
-        icon_loader.set_app_icon(root)
-    except Exception:
-        pass
+    from PIL import Image, ImageTk
 
     # ---------- HEADER ----------
-    from PIL import Image, ImageTk
     header = tk.Frame(root, bg=config.CARD)
     header.pack(side="top", fill="x", padx=10, pady=8)
 
@@ -76,14 +93,12 @@ def run_app(device_id=None):
     )
     title.pack(side="left", anchor="center")
 
-    # --- Controls rechts ---
     controls = tk.Frame(header, bg=config.CARD)
     controls.pack(side="right", pady=2)
 
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     unit_celsius = tk.BooleanVar(value=cfg.get("unit_celsius", True))
 
-    # Leaf Offset
     tk.Label(
         controls,
         text=f"Leaf Temp Offset ({'°C' if unit_celsius.get() else '°F'}):",
@@ -112,7 +127,6 @@ def run_app(device_id=None):
         justify="center"
     ).pack(side="left")
 
-    # Humidity Offset
     tk.Label(
         controls,
         text="Humidity Offset (%):",
@@ -140,13 +154,12 @@ def run_app(device_id=None):
         justify="center"
     ).pack(side="left")
 
-    # Reset Offsets
     def reset_offsets():
         leaf_offset_var.set(0.0)
         hum_offset_var.set(0.0)
         config.leaf_offset_c[0] = 0.0
         config.humidity_offset[0] = 0.0
-        log("Offsets reset (Leaf=0.0°C, Humidity=0.0%)")
+        print("Offsets reset (Leaf=0.0°C, Humidity=0.0%)")
 
     tk.Button(
         controls,
@@ -156,7 +169,6 @@ def run_app(device_id=None):
         fg="black"
     ).pack(side="left", padx=6)
 
-    # --- Sync zurück ins GUI (einmalig; Reschedule macht der Safe-Wrapper unten) ---
     def refresh_offset_fields_once():
         try:
             if unit_celsius.get():
@@ -171,6 +183,8 @@ def run_app(device_id=None):
                 hum_offset_var.set(config.humidity_offset[0])
         except TclError:
             return
+
+
 
     # ---------- HEADER BUTTON ROWS ----------
     button_frame = tk.Frame(header, bg=config.CARD)

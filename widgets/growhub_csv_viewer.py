@@ -15,8 +15,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.dates as mdates
-from footer_widget import create_footer_light
-
+from widgets.footer_widget import create_footer_light
 
 # ---------- Globale Helper ----------
 def _find_time_col(cols):

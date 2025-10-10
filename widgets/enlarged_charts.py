@@ -13,7 +13,7 @@ import matplotlib.patheffects as path_effects
 from PIL import Image, ImageTk
 import datetime
 import os
-from footer_widget import create_footer
+from widgets.footer_widget import create_footer
 
 
 def open_window(parent, config, utils,
