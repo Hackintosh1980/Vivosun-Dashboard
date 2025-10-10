@@ -190,6 +190,10 @@ def open_window(parent, config=config, utils=utils):
     canvas = FigureCanvasTkAgg(fig, master=win)
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=6)
 
+
+# ---------- FOOTER ----------
+    set_status, mark_data_update = create_footer(win, config)
+
     # ---------- UPDATE LOOP ----------
     def update():
         d = utils.safe_read_json(config.DATA_FILE)
@@ -230,19 +234,18 @@ def open_window(parent, config=config, utils=utils):
             lines.append(f"External: {disp_temp(te):.1f}{unit} | {he:.1f}% | VPD={vpd_ext:.2f} kPa")
 
         info_box.set_text("\n".join(lines))
-
         canvas.draw_idle()
+
+        try:
+            mark_data_update()
+        except Exception:
+            pass
+
         win.after(3000, update)
 
     update()
-
-
-    # ---------- FOOTER ----------
-    try:
-        create_footer(win, config)
-    except Exception:
-        pass
-
     return win
 
- 
+
+
+

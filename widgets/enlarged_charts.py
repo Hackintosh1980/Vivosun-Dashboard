@@ -88,7 +88,6 @@ def open_window(parent, config, utils,
     bottom = tk.Frame(win, bg=config.BG)
     bottom.pack(side="bottom", fill="x")
 
-    # --- Steuerleiste ---
     ctrl = tk.Frame(bottom, bg=config.CARD)
     ctrl.pack(side="top", fill="x", pady=4)
 
@@ -96,7 +95,7 @@ def open_window(parent, config, utils,
     xs = []
 
     SPANS_DAYS = {
-        "1m": 1 / 1440,   # 1 Minute
+        "1m": 1 / 1440,
         "15m": 15 / 1440,
         "30m": 30 / 1440,
         "1h": 1 / 24,
@@ -142,48 +141,8 @@ def open_window(parent, config, utils,
     tk.Button(ctrl, text="🔄 Reset View", command=reset_view,
               bg="lime", fg="black", font=("Segoe UI", 10, "bold")).pack(side="left", padx=6)
 
-    # --- Footer ganz unten ---
-    footer = create_footer(bottom, config)
-    footer(False)
-
-    # ---------- PAN & ZOOM ----------
-    _drag = {"x": None, "xlim": None}
-
-    def on_scroll(event):
-        cur_lo, cur_hi = ax.get_xlim()
-        if cur_lo == cur_hi:
-            return
-        x0 = event.xdata if event.xdata is not None else (cur_lo + cur_hi) / 2
-        zoom_in = event.step > 0 if hasattr(event, "step") else (event.button == "up")
-        factor = 0.9 if zoom_in else 1.1
-        width = (cur_hi - cur_lo) * factor
-        ax.set_xlim(x0 - width / 2, x0 + width / 2)
-        canvas.draw_idle()
-
-    def on_press(event):
-        if event.button == 1:
-            _drag["x"] = event.x
-            _drag["xlim"] = ax.get_xlim()
-
-    def on_motion(event):
-        if _drag["x"] is None or event.x is None:
-            return
-        dx_pix = event.x - _drag["x"]
-        lo, hi = _drag["xlim"]
-        if ax.bbox.width == 0:
-            return
-        scale = (hi - lo) / ax.bbox.width
-        ax.set_xlim(lo - dx_pix * scale, hi - dx_pix * scale)
-        canvas.draw_idle()
-
-    def on_release(event):
-        _drag["x"] = None
-        _drag["xlim"] = None
-
-    fig.canvas.mpl_connect("scroll_event", on_scroll)
-    fig.canvas.mpl_connect("button_press_event", on_press)
-    fig.canvas.mpl_connect("motion_notify_event", on_motion)
-    fig.canvas.mpl_connect("button_release_event", on_release)
+    # ---------- FOOTER ----------
+    set_status, mark_data_update = create_footer(bottom, config)
 
     # ---------- UPDATE ----------
     _prev_span = [span_choice.get()]
@@ -228,19 +187,14 @@ def open_window(parent, config, utils,
             else:
                 value_label.set_text("--")
 
+        try:
+            mark_data_update()
+        except Exception:
+            pass
+
         canvas.draw_idle()
         win.after(1000, update)
 
     apply_locator(SPANS_DAYS[span_choice.get()])
     update()
-
-    # ---------- FOOTER UPDATE ----------
-    def update_footer():
-        status = utils.safe_read_json(getattr(config, "STATUS_FILE", "status.json")) or {}
-        connected = status.get("connected", False)
-        footer(connected)
-        win.after(3000, update_footer)
-
-    update_footer()
-
     return win
