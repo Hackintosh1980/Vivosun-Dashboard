@@ -423,28 +423,6 @@ def run_app(device_id=None):
     # Erstmal Full-Layout
     setup_charts(chart_order_full)
 
-    # ---------- Umschalt-Button ----------
-    def toggle_charts():
-        try:
-            compact_mode.set(not compact_mode.get())
-            if compact_mode.get():
-                setup_charts(chart_order_compact)
-                log("Switched to Compact Chart View (Internal only)")
-            else:
-                setup_charts(chart_order_full)
-                log("Switched to Full Chart View (Internal + External)")
-        except TclError:
-            pass
-
-    toggle_btn = tk.Button(
-        root,
-        text="🧭 Toggle Charts (3↔6)",
-        command=toggle_charts,
-        bg="lime",
-        fg="black",
-        font=("Segoe UI", 10, "bold")
-    )
-    toggle_btn.pack(side="bottom", pady=6)
 
     # ---------- Klick auf Chart öffnet Enlarged Window ----------
     def on_click(event):
