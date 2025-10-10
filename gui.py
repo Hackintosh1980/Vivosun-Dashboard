@@ -523,9 +523,9 @@ def run_app(device_id=None):
             if any(v is not None for v in [t_main, t_ext, h_main, h_ext]):
                 last_update_time[0] = now
 
+        
         # --- Status LED Logik über status.json + freshness ---
-        status_path = getattr(config, "STATUS_FILE", os.path.join(os.path.dirname(__file__), "status.json"))
-        status = utils.safe_read_json(status_path) or {}
+        status = utils.safe_read_json(config.STATUS_FILE) or {}
         status_connected = status.get("connected", False)
 
         if last_update_time[0] is None:
@@ -540,6 +540,7 @@ def run_app(device_id=None):
         except TclError:
             return
 
+        
         # --- Auto-Compact je nach externen Daten ---
         external_missing_now = (t_ext is None) and (h_ext is None)
         if external_missing_now:
