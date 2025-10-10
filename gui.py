@@ -321,7 +321,8 @@ def run_app(device_id=None):
     tk.Button(row2, text="🔄 Restart Program", command=restart_program).pack(side="left", padx=6)
 
     # ---------- FOOTER via Widget ----------
-    set_status = create_footer(root, config)
+    set_status, mark_data_update = create_footer(root, config)
+
     try:
         set_status(False)  # Initialzustand
     except Exception:
@@ -488,6 +489,12 @@ def run_app(device_id=None):
         d = utils.safe_read_json(config.DATA_FILE)
         now = datetime.datetime.now()
         time_buffer.append(now)
+
+        # --- 🟢 Footer-Update: Frische markieren ---
+        try:
+            mark_data_update()   # signalisiert dem Footer: neue Messung da
+        except Exception:
+            pass
 
         # --- Helper zum Bereinigen ---
         def sanitize(val):
