@@ -355,10 +355,11 @@ def run_app(device_id=None):
         ("vpd_int", axs[0, 2], "Internal VPD",       "lime",        "kPa"),
     ]
 
-    # Zustand: kompakt / voll
+
+    # ---------- Zustand: kompakt / voll ----------
     compact_mode = tk.BooleanVar(value=False)
 
-    # Matplotlib Canvas ins Tk-Fenster (vor Setup, damit canvas verfügbar ist)
+    # ---------- Matplotlib Canvas ins Tk-Fenster (vor Setup, damit canvas verfügbar ist) ----------
     canvas = FigureCanvasTkAgg(fig, master=root)
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=12, pady=8)
     NavigationToolbar2Tk(canvas, root).update()
@@ -420,8 +421,14 @@ def run_app(device_id=None):
         except TclError:
             return
 
-    # Erstmal Full-Layout
+    # ---------- Erstmal Full-Layout ----------
     setup_charts(chart_order_full)
+
+
+
+
+
+
 
 
     # ---------- Klick auf Chart öffnet Enlarged Window ----------
