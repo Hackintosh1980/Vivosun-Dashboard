@@ -1,6 +1,12 @@
-/__pycache__
+__pycache__/vivosun_style.cpython-312.pyc
+__pycache__/setup_gui.cpython-312.pyc
 __pycache__/growhub_csv_viewer.cpython-312.pyc
-*.json
-*.csv
-thermo_history.csv
-thermo_history.csv
+__pycache__/async_reader.cpython-312.pyc
+__pycache__/charts.cpython-312.pyc
+__pycache__/config.cpython-312.pyc
+__pycache__/enlarged_charts.cpython-312.pyc
+__pycache__/footer_widget.cpython-312.pyc
+__pycache__/gui.cpython-312.pyc
+__pycache__/icon_loader.cpython-312.pyc
+__pycache__/scattered_vpd_chart.cpython-312.pyc
+__pycache__/utils.cpython-312.pyc
