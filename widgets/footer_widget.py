@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 footer_widget.py – universelles Footer-Widget für VIVOSUN Dashboard & Module
-Erzeugt Status-LED + Info-Link, Rückgabe: (set_status, poll_status)
+Erzeugt Status-LED + Info-Link, Rückgabe: (set_status, mark_data_update)
+Startet ohne Flackern und prüft den aktuellen Status.json sofort.
 """
 
 import tkinter as tk
@@ -24,39 +25,59 @@ def create_footer(parent, config):
 
     status_text = tk.Label(
         status_frame,
-        text="Disconnected",
+        text="Initializing...",
         bg=config.CARD,
-        fg="orange",
+        fg="gray",
         font=("Segoe UI", 11, "bold")
     )
     status_text.pack(side="left")
 
     last_update_time = [None]
+    disconnect_counter = [0]
 
-    def set_status(connected=True):
+    def set_status(connected=None):
+        """Setzt LED und Textzustand."""
         status_led.delete("all")
-        if connected:
+        if connected is None:
+            status_led.create_oval(2, 2, 20, 20, fill="gray", outline="")
+            status_text.config(text="Initializing...", fg="gray")
+        elif connected:
             status_led.create_oval(2, 2, 20, 20, fill="lime green", outline="")
             status_text.config(text="Connected", fg="lime green")
         else:
             status_led.create_oval(2, 2, 20, 20, fill="red", outline="")
             status_text.config(text="Disconnected", fg="red")
 
-    set_status(False)
+    # ---------- Sofortigen Status prüfen ----------
+    try:
+        current = utils.safe_read_json(config.STATUS_FILE) or {}
+        if current.get("connected", False):
+            set_status(True)
+            last_update_time[0] = datetime.datetime.now()
+        else:
+            set_status(False)
+    except Exception:
+        set_status(None)
 
+    # ---------- Polling ----------
     def poll_status():
         now = datetime.datetime.now()
         status = utils.safe_read_json(config.STATUS_FILE) or {}
         status_connected = status.get("connected", False)
 
         if last_update_time[0] is None:
-            connected = False
-        else:
-            delta = (now - last_update_time[0]).total_seconds()
-            connected = delta < 30
+            last_update_time[0] = now
 
-        final_connected = connected and status_connected
-        set_status(final_connected)
+        delta = (now - last_update_time[0]).total_seconds()
+        fresh = delta < 30
+
+        if status_connected and fresh:
+            disconnect_counter[0] = 0
+            set_status(True)
+        else:
+            disconnect_counter[0] += 1
+            if disconnect_counter[0] >= 3:
+                set_status(False)
 
         parent.after(2000, poll_status)
 
@@ -65,9 +86,10 @@ def create_footer(parent, config):
 
     parent.after(2000, poll_status)
 
+    # ---------- INFO-LABEL ----------
     info = tk.Label(
         footer,
-        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: sormy/vivosun-thermo",
+        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: Hackintosh1980/Vivosun-Dashboard",
         bg=config.CARD,
         fg=config.TEXT,
         font=("Segoe UI", 11),
@@ -76,7 +98,7 @@ def create_footer(parent, config):
     info.pack(side="right")
 
     def open_github(event):
-        webbrowser.open("https://github.com/sormy/vivosun-thermo")
+        webbrowser.open("https://github.com/Hackintosh1980/Vivosun-Dashboard")
 
     info.bind("<Button-1>", open_github)
 
@@ -84,9 +106,7 @@ def create_footer(parent, config):
 
 
 def create_footer_light(parent, config=None):
-    """
-    Kleiner Footer ohne Statusanzeige – nur Version & GitHub-Link.
-    """
+    """Kleiner Footer ohne Statusanzeige – nur Version & GitHub-Link."""
     bg = getattr(config, "CARD", "#1e2a38")
     fg = getattr(config, "TEXT", "white")
 
@@ -95,7 +115,7 @@ def create_footer_light(parent, config=None):
 
     info = tk.Label(
         footer,
-        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: sormy/vivosun-thermo",
+        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: Hackintosh1980/Vivosun-Dashboard",
         bg=bg,
         fg=fg,
         font=("Segoe UI", 11),
@@ -104,7 +124,7 @@ def create_footer_light(parent, config=None):
     info.pack(side="right")
 
     def open_github(event):
-        webbrowser.open("https://github.com/sormy/vivosun-thermo")
+        webbrowser.open("https://github.com/Hackintosh1980/Vivosun-Dashboard")
 
     info.bind("<Button-1>", open_github)
 
