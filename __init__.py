@@ -1,1 +1,5 @@
-# vivosun_app package
+# vivosun package
+from .main import main
+
+if __name__ == "__main__":
+    main()

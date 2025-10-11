@@ -108,7 +108,7 @@ def run_setup():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 scanner = VivosunThermoScanner()
-                found = loop.run_until_complete(scanner.discover(timeout=45))
+                found = loop.run_until_complete(scanner.discover(timeout=10))
                 if not found:
                     result_queue.put("⚠️ Keine Geräte gefunden.")
                 else:

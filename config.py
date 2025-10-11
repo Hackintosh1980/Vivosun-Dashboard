@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+config.py – zentrale Konfiguration für das 🌱 VIVOSUN Thermo Dashboard
+"""
+
 import os
 import sys
 from pathlib import Path
@@ -14,7 +20,7 @@ APP_GITHUB = "https://github.com/Hackintosh1980/Vivosun-Dashboard"
 def app_root() -> Path:
     """Ermittle den App-Root (funktioniert in Source & PyInstaller)."""
     if getattr(sys, "frozen", False):
-        # onedir/onefile-Build
+        # onedir/onefile-Build (PyInstaller)
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
 
@@ -22,7 +28,7 @@ BASE_DIR = app_root()
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-# --- Datei-Pfade (alle landen unter /data) ---
+# --- Datei-Pfade (alle unter /data) ---
 CONFIG_FILE  = DATA_DIR / "config.json"
 DATA_FILE    = DATA_DIR / "thermo_values.json"
 HISTORY_FILE = DATA_DIR / "thermo_history.csv"
@@ -34,16 +40,24 @@ CARD   = "#0f1e2a"
 TEXT   = "#d6eaff"
 ACCENT = "#8be9fd"
 
-# --- Timing ---
-UI_POLL_INTERVAL = 2.0
-PLOT_BUFFER_LEN  = 600
+# =====================================================
+#                     TIMING
+# =====================================================
 
-# --- Reader Polling ---
-SCAN_INTERVAL = 2
 
-# --- Globale Offsets ---
-leaf_offset_c   = [0.0]
-humidity_offset = [0.0]
+# --- Dashboard / GUI ---
+UI_POLL_INTERVAL = 2.0         # Sekunden für UI-Refresh
+PLOT_BUFFER_LEN  = 600         # Anzahl gespeicherter Werte (~10 min bei 1s)
+
+# --- Sensor Polling ---
+SENSOR_POLL_INTERVAL = 2       # Sekunden zwischen Messwertabfragen
 
 # --- Reconnect-Verhalten ---
-RECONNECT_DELAY = 2
+RECONNECT_DELAY = 3            # Sekunden zwischen Reconnect-Versuchen
+
+# =====================================================
+#                     OFFSETS
+# =====================================================
+
+leaf_offset_c   = [0.0]        # Leaf-Temp-Offset (°C)
+humidity_offset = [0.0]        # Humidity-Offset (%)
