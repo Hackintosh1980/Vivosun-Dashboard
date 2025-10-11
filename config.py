@@ -46,11 +46,11 @@ ACCENT = "#8be9fd"
 
 
 # --- Dashboard / GUI ---
-UI_POLL_INTERVAL = 2.0         # Sekunden für UI-Refresh
+UI_POLL_INTERVAL = 1.0         # Sekunden für UI-Refresh
 PLOT_BUFFER_LEN  = 600         # Anzahl gespeicherter Werte (~10 min bei 1s)
 
 # --- Sensor Polling ---
-SENSOR_POLL_INTERVAL = 2       # Sekunden zwischen Messwertabfragen
+SENSOR_POLL_INTERVAL = 1       # Sekunden zwischen Messwertabfragen
 
 # --- Reconnect-Verhalten ---
 RECONNECT_DELAY = 3            # Sekunden zwischen Reconnect-Versuchen

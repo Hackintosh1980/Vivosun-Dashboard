@@ -66,15 +66,16 @@ def run_app(device_id=None):
     header = tk.Frame(root, bg=config.CARD)
     header.pack(side="top", fill="x", padx=10, pady=8)
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
-    logo_path = os.path.join(assets_dir, "Logo.png")
-
+    # Logo-Pfad (eine Ebene über main_gui)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logo_path = os.path.join(base_dir, "assets", "Logo.png")
+    
     left_frame = tk.Frame(header, bg=config.CARD)
     left_frame.pack(side="left", padx=6)
 
     if os.path.exists(logo_path):
         try:
-            img = Image.open(logo_path).resize((120, 120), Image.LANCZOS)
+            img = Image.open(logo_path).resize((120, 100), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
             logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
             logo_label.image = logo_img

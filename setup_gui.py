@@ -128,7 +128,7 @@ def run_setup():
             finally:
                 loop.close()
 
-        text.insert("end", "🔍 Scanning for devices (45s)…\n")
+        text.insert("end", "🔍 Scanning for devices (10s)…\n")
         text.see("end")
         scan_btn.config(state="disabled")
         start_pulse()
@@ -244,7 +244,7 @@ def run_setup():
 
     footer_label = tk.Label(
         footer,
-        text="📟 VIVOSUN Setup Tool v2.3 (Cross-Platform Compact)",
+        text="📟 VIVOSUN Setup Tool v2.4 (Cross-Platform Compact)",
         bg=config.CARD,
         fg=config.TEXT,
         font=("Segoe UI", 11)
