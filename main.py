@@ -16,20 +16,16 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 # -------------------------------------------------------------
-# Imports (neue Paketstruktur)
+# Imports (aktuelle Struktur)
 # -------------------------------------------------------------
-from main_gui.gui import run_app
-import config
-import utils
-
-# -------------------------------------------------------------
-# App-Start
-# -------------------------------------------------------------
-if __name__ == "__main__":
-    run_app()
+from main_gui.gui import run_app   # Haupt-Dashboard
+import setup_gui                   # ⚙️ Setup liegt jetzt im Root
+import config, utils
 
 
-    
+# -------------------------------------------------------------
+# App-Startfunktion
+# -------------------------------------------------------------
 def main():
     # --- Config prüfen ---
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
@@ -38,10 +34,9 @@ def main():
     if not device_id:
         print("⚠️ No device_id found → starting setup...")
         setup_gui.run_setup()
-        # Nach Setup sofort beenden, sonst läuft Dashboard parallel
         sys.exit(0)
 
-    # --- Immer frische Dateien erzeugen ---
+    # --- Alte Dateien löschen ---
     for f in [config.DATA_FILE, config.HISTORY_FILE, getattr(config, "STATUS_FILE", None)]:
         if not f:
             continue
@@ -65,5 +60,8 @@ def main():
     run_app(device_id)
 
 
+# -------------------------------------------------------------
+# Entry Point
+# -------------------------------------------------------------
 if __name__ == "__main__":
     main()

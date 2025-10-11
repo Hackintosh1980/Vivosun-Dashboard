@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🌱 VIVOSUN Setup GUI – Compact Cross-Platform Edition
+🌱 VIVOSUN Setup GUI – Cross-Platform Standalone Edition
 """
 
 import os, re, sys, tkinter as tk
@@ -9,10 +9,17 @@ from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
 import threading, queue, asyncio
 
+# -------------------------------------------------------------
+# Robust imports: funktioniert im Root & im Paketlauf
+# -------------------------------------------------------------
 try:
-    from . import config, utils, icon_loader, gui
+    import config, utils, icon_loader
+    from main_gui import gui
 except ImportError:
-    import config, utils, icon_loader, gui
+    # Fallback bei gebündeltem PyInstaller oder abweichenden Pfaden
+    sys.path.append(os.path.dirname(__file__))
+    import config, utils, icon_loader
+    from main_gui import gui
 
 from vivosun_thermo import VivosunThermoScanner
 

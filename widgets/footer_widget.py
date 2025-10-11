@@ -89,7 +89,7 @@ def create_footer(parent, config):
     # ---------- INFO-LABEL ----------
     info = tk.Label(
         footer,
-        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: Hackintosh1980/Vivosun-Dashboard",
+        text="🌱 Vivosun Dashboard v1.2.3  •  👨‍💻 Dominik Hackintosh  •  GitHub: Hackintosh1980/Vivosun-Dashboard",
         bg=config.CARD,
         fg=config.TEXT,
         font=("Segoe UI", 11),
@@ -115,7 +115,7 @@ def create_footer_light(parent, config=None):
 
     info = tk.Label(
         footer,
-        text="🌱 Vivosun Dashboard v1.2.2  •  👨‍💻 Dominik Hackintosh  •  GitHub: Hackintosh1980/Vivosun-Dashboard",
+        text="🌱 Vivosun Dashboard v1.2.3  •  👨‍💻 Dominik Hackintosh  •  GitHub: Hackintosh1980/Vivosun-Dashboard",
         bg=bg,
         fg=fg,
         font=("Segoe UI", 11),
