@@ -40,11 +40,11 @@ def open_window(parent, config=config, utils=utils):
     win.geometry("1200x900")
     win.configure(bg=config.BG)
 
-    # ---------- HEADER ----------
-    header = tk.Frame(win, bg=config.CARD)
+ # ---------- HEADER ----------
+    header = tk.Frame(win, bg="#0d231d")
     header.pack(side="top", fill="x", padx=10, pady=8)
 
-    left_frame = tk.Frame(header, bg=config.CARD)
+    left_frame = tk.Frame(header, bg="#0d231d")
     left_frame.pack(side="left", padx=6)
 
     assets_dir = os.path.join(os.path.dirname(__file__), "assets")
@@ -53,7 +53,7 @@ def open_window(parent, config=config, utils=utils):
         try:
             img = Image.open(logo_path).resize((90, 90), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
-            logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
+            logo_label = tk.Label(left_frame, image=logo_img, bg="#0d231d")
             logo_label.image = logo_img
             logo_label.pack(side="left", padx=(0, 10))
         except Exception as e:
@@ -62,8 +62,8 @@ def open_window(parent, config=config, utils=utils):
     title = tk.Label(
         left_frame,
         text="🌱 VPD Comfort Chart",
-        bg=config.CARD,
-        fg=config.TEXT,
+        bg="#0d231d",
+        fg="#a8ff60",
         font=("Segoe UI", 20, "bold"),
         anchor="w",
         justify="left"
@@ -71,7 +71,7 @@ def open_window(parent, config=config, utils=utils):
     title.pack(side="left", anchor="center")
 
     # ---------- HEADER CONTROLS ----------
-    controls = tk.Frame(header, bg=config.CARD)
+    controls = tk.Frame(header, bg="#0d231d")
     controls.pack(side="right", pady=2)
 
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
@@ -79,19 +79,17 @@ def open_window(parent, config=config, utils=utils):
 
     # Leaf Offset
     tk.Label(
-        controls, text=f"Leaf Offset ({'°C' if unit_celsius else '°F'}):",
-        bg=config.CARD, fg=config.TEXT
+        controls,
+        text=f"Leaf Offset ({'°C' if unit_celsius else '°F'}):",
+        bg="#0d231d",
+        fg="#a8ff60",
+        font=("Segoe UI", 10, "bold")
     ).pack(side="left", padx=6)
 
     start_val_leaf = config.leaf_offset_c[0] if unit_celsius else (config.leaf_offset_c[0] * 9.0 / 5.0)
     leaf_offset_var = tk.DoubleVar(value=float(start_val_leaf))
 
     def on_leaf_offset_change(*_):
-        """
-        WICHTIG: Änderungen hier -> zentral über set_offsets_from_outside(),
-        damit Header-Spinboxen SOFORT gespiegelt werden (bidirektional).
-        In config IMMER °C speichern.
-        """
         try:
             val = float(leaf_offset_var.get())
             c_val = val if unit_celsius else (val * 5.0 / 9.0)
@@ -100,40 +98,69 @@ def open_window(parent, config=config, utils=utils):
             set_offsets_from_outside(leaf=0.0, hum=None, persist=True)
 
     leaf_offset_var.trace_add("write", on_leaf_offset_change)
-    tk.Spinbox(
-        controls, textvariable=leaf_offset_var,
-        from_=-10.0, to=10.0, increment=0.1,
-        width=6, bg=config.CARD, fg=config.TEXT,
-        justify="center"
-    ).pack(side="left")
+
+    leaf_entry = tk.Entry(
+        controls, textvariable=leaf_offset_var, width=6, justify="center",
+        bg="#072017", fg="#e5ffe5", relief="flat",
+        highlightthickness=2, highlightcolor="#a8ff60", insertbackground="#e5ffe5"
+    )
+    leaf_entry.pack(side="left", padx=(4, 4))
+
+    # Leaf stepper buttons
+    def step_leaf(delta):
+        try:
+            leaf_offset_var.set(round(float(leaf_offset_var.get()) + delta, 2))
+        except Exception:
+            leaf_offset_var.set(0.0)
+
+    tk.Button(controls, text="▲", bg="#a8ff60", fg="black",
+              font=("Segoe UI", 10, "bold"), width=2, relief="flat",
+              command=lambda: step_leaf(+0.1)).pack(side="left", padx=2)
+    tk.Button(controls, text="▼", bg="#a8ff60", fg="black",
+              font=("Segoe UI", 10, "bold"), width=2, relief="flat",
+              command=lambda: step_leaf(-0.1)).pack(side="left", padx=2)
 
     # Humidity Offset
     tk.Label(
-        controls, text="Humidity Offset (%):",
-        bg=config.CARD, fg=config.TEXT
+        controls,
+        text="Humidity Offset (%):",
+        bg="#0d231d",
+        fg="#a8ff60",
+        font=("Segoe UI", 10, "bold")
     ).pack(side="left", padx=6)
 
     hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
 
     def on_hum_offset_change(*_):
-        """
-        Änderungen hier -> set_offsets_from_outside(),
-        damit Header-Spinboxen SOFORT gespiegelt werden.
-        """
         try:
             set_offsets_from_outside(leaf=None, hum=float(hum_offset_var.get()), persist=True)
         except Exception:
             set_offsets_from_outside(leaf=None, hum=0.0, persist=True)
 
     hum_offset_var.trace_add("write", on_hum_offset_change)
-    tk.Spinbox(
-        controls, textvariable=hum_offset_var,
-        from_=-50.0, to=50.0, increment=1.0,
-        width=6, bg=config.CARD, fg=config.TEXT,
-        justify="center"
-    ).pack(side="left")
 
-    # Reset Offsets (triggert Traces -> persist & GUI-Sync)
+    hum_entry = tk.Entry(
+        controls, textvariable=hum_offset_var, width=6, justify="center",
+        bg="#072017", fg="#e5ffe5", relief="flat",
+        highlightthickness=2, highlightcolor="#a8ff60", insertbackground="#e5ffe5"
+    )
+    hum_entry.pack(side="left", padx=(4, 4))
+
+    # Humidity stepper buttons
+    def step_hum(delta):
+        try:
+            hum_offset_var.set(round(float(hum_offset_var.get()) + delta, 1))
+        except Exception:
+            hum_offset_var.set(0.0)
+
+    tk.Button(controls, text="▲", bg="#a8ff60", fg="black",
+              font=("Segoe UI", 10, "bold"), width=2, relief="flat",
+              command=lambda: step_hum(+0.5)).pack(side="left", padx=2)
+    tk.Button(controls, text="▼", bg="#a8ff60", fg="black",
+              font=("Segoe UI", 10, "bold"), width=2, relief="flat",
+              command=lambda: step_hum(-0.5)).pack(side="left", padx=2)
+
+    # Reset Offsets Button
     def reset_offsets():
         leaf_offset_var.set(0.0)
         hum_offset_var.set(0.0)
@@ -141,16 +168,17 @@ def open_window(parent, config=config, utils=utils):
     tk.Button(
         controls, text="↺ Reset Offsets",
         command=reset_offsets,
-        bg="orange", fg="black",
-        font=("Segoe UI", 10, "bold")
+        bg="#ffaa00", fg="black",
+        font=("Segoe UI", 10, "bold"),
+        relief="flat", padx=10, pady=4,
+        activebackground="#ffbb33"
     ).pack(side="left", padx=8)
 
-    # Nach Aufbau: Header-Spinboxen auf aktuellen config-Stand spiegeln
+    # Sync mit Haupt-GUI
     try:
         sync_offsets_to_gui()
     except Exception:
         pass
-
     # ---------- MATPLOTLIB ----------
     fig, ax = plt.subplots(figsize=(9, 7), facecolor=config.BG)
     ax.set_facecolor(config.BG)
