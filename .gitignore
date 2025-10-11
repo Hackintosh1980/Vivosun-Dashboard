@@ -13,3 +13,4 @@ widgets/__pycache__/growhub_csv_viewer.cpython-312.pyc
 widgets/__pycache__/scattered_vpd_chart.cpython-312.pyc
 data/thermo_history.csv
 data/thermo_values.json
+.DS_Store
