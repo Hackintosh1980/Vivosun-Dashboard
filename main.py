@@ -18,7 +18,7 @@ if BASE_DIR not in sys.path:
 # -------------------------------------------------------------
 # Imports (aktuelle Struktur)
 # -------------------------------------------------------------
-from main_gui.gui import run_app   # Haupt-Dashboard
+from main_gui.core_gui import run_app  # Haupt-Dashboard
 import setup_gui                   # ⚙️ Setup liegt jetzt im Root
 import config, utils
 

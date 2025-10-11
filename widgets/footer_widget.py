@@ -35,18 +35,36 @@ def create_footer(parent, config):
     last_update_time = [None]
     disconnect_counter = [0]
 
+    _last_state = [None]  # Merkt sich den letzten Zustand
+
     def set_status(connected=None):
-        """Setzt LED und Textzustand."""
+        """Setzt LED und Textzustand (geglättet, verhindert Blinken)."""
+        # Wenn der Zustand gleich geblieben ist → nichts tun
+        if _last_state[0] == connected:
+            return
+        _last_state[0] = connected
+
         status_led.delete("all")
+
         if connected is None:
             status_led.create_oval(2, 2, 20, 20, fill="gray", outline="")
             status_text.config(text="Initializing...", fg="gray")
+
         elif connected:
             status_led.create_oval(2, 2, 20, 20, fill="lime green", outline="")
             status_text.config(text="Connected", fg="lime green")
+
         else:
-            status_led.create_oval(2, 2, 20, 20, fill="red", outline="")
-            status_text.config(text="Disconnected", fg="red")
+            # kurze Verzögerung, um Flackern bei kurzen Unterbrechungen zu vermeiden
+            status_led.after(
+                2000,
+                lambda: (
+                    status_led.delete("all"),
+                    status_led.create_oval(2, 2, 20, 20, fill="red", outline=""),
+                    status_text.config(text="Disconnected", fg="red")
+                )
+                if _last_state[0] is False else None
+            )
 
     # ---------- Sofortigen Status prüfen ----------
     try:

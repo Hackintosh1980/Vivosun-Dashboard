@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-enlarged_charts.py – Vollbild-Chart-Fenster mit echtem Footer-Status-Sync
-und GUI-Design passend zur Hauptansicht
+enlarged_charts.py – Vollbild-Chart-Fenster (kompatibel zu charts_gui)
+Zeigt den Verlauf eines Sensors (Temp, Hum, VPD) im Live-Update mit
+Zoom, Pause/Resume, Reset und echtem Footer-Sync.
 """
 
 import tkinter as tk
@@ -16,9 +17,41 @@ import os
 from widgets.footer_widget import create_footer
 
 
-def open_window(parent, config, utils,
-                key, title, color, ylabel,
-                data_buffers, time_buffer, unit_celsius):
+# -------------------------------------------------------------------
+# Kompatibilitäts-Wrapper für charts_gui.py
+# -------------------------------------------------------------------
+def open_window(parent, data_buffers, focus_key="t_main"):
+    """Wrapper, um enlarged_charts aus charts_gui aufzurufen."""
+    mapping = {
+        "t_main": ("Internal Temp",  "#ff6633", "°C"),
+        "h_main": ("Humidity",       "#4ac1ff", "%"),
+        "vpd_int": ("Internal VPD",  "#00ff99", "kPa"),
+        "t_ext": ("External Temp",   "#ff00aa", "°C"),
+        "h_ext": ("External Hum.",   "#ffaa00", "%"),
+        "vpd_ext": ("External VPD",  "#ff4444", "kPa"),
+    }
+
+    title, color, ylabel = mapping.get(focus_key, ("Unknown", "white", ""))
+    import config, utils
+
+    # Zeitpuffer übernehmen (aus Charts)
+    time_buffer = data_buffers.get("timestamps", [])
+
+    # Temperatureinheit (GUI-global)
+    unit_celsius = tk.BooleanVar(value=True)
+
+    return _open_enlarged(parent, config, utils,
+                          key=focus_key, title=title, color=color,
+                          ylabel=ylabel, data_buffers=data_buffers,
+                          time_buffer=time_buffer, unit_celsius=unit_celsius)
+
+
+# -------------------------------------------------------------------
+# Hauptfenster (ursprünglich open_window)
+# -------------------------------------------------------------------
+def _open_enlarged(parent, config, utils,
+                   key, title, color, ylabel,
+                   data_buffers, time_buffer, unit_celsius):
 
     # ---------- Fenster ----------
     win = tk.Toplevel(parent)
@@ -94,6 +127,7 @@ def open_window(parent, config, utils,
     paused = tk.BooleanVar(value=False)
     xs = []
 
+    # Zeitfenster-Auswahl (in Tagen)
     SPANS_DAYS = {
         "1m": 1 / 1440,
         "15m": 15 / 1440,
@@ -106,6 +140,7 @@ def open_window(parent, config, utils,
     }
     span_choice = tk.StringVar(value="1h")
 
+    # Achsenformatierung abhängig vom Zeitfenster
     def apply_locator(span_days: float):
         if span_days <= 1 / 24:
             ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=5))
@@ -155,7 +190,7 @@ def open_window(parent, config, utils,
         nonlocal xs
         xs = [mdates.date2num(t) for t in time_buffer]
         ys = []
-        for v in data_buffers[key]:
+        for v in data_buffers.get(key, []):
             if v is None:
                 ys.append(float("nan"))
             elif key in ("t_main", "t_ext"):
@@ -171,9 +206,14 @@ def open_window(parent, config, utils,
             ax.relim()
             ax.autoscale_view(scalex=False, scaley=True)
 
+            # Locator anpassen, wenn Zeitfenster geändert
             if span_choice.get() != _prev_span[0]:
                 apply_locator(span_days)
                 _prev_span[0] = span_choice.get()
+
+            # Auto-Zoom auf letzten Verlauf (sanft)
+            if len(xs) > 2:
+                ax.set_xlim(xs[-min(60, len(xs))], xs[-1])
 
             latest = ys[-1]
             if latest is not None and not (latest != latest):

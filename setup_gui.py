@@ -14,12 +14,12 @@ import threading, queue, asyncio
 # -------------------------------------------------------------
 try:
     import config, utils, icon_loader
-    from main_gui import gui
+    from main_gui import core_gui
 except ImportError:
     # Fallback bei gebündeltem PyInstaller oder abweichenden Pfaden
     sys.path.append(os.path.dirname(__file__))
     import config, utils, icon_loader
-    from main_gui import gui
+    from main_gui import core_gui
 
 from vivosun_thermo import VivosunThermoScanner
 
@@ -97,7 +97,10 @@ def run_setup():
         text.see("end")
 
         root.destroy()
-        gui.run_app(selected_id)
+        core_gui.run_app(selected_id)
+
+
+
 
     # ---------- SCAN ----------
     scan_btn = None
