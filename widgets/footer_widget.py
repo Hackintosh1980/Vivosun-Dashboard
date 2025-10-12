@@ -4,6 +4,9 @@
 footer_widget.py – universelles Footer-Widget für VIVOSUN Dashboard & Module
 Erzeugt Status-LED + Info-Link, Rückgabe: (set_status, mark_data_update)
 Startet ohne Flackern und prüft den aktuellen Status.json sofort.
+Kompatibel mit:
+- Dashboard (set_status(True/False/None))
+- Enlarged/Scatter (set_status("🟢 Text", "#00ff00"))
 """
 
 import tkinter as tk
@@ -16,7 +19,7 @@ def create_footer(parent, config):
     footer = tk.Frame(parent, bg=config.CARD)
     footer.pack(side="bottom", fill="x", padx=10, pady=6)
 
-    # ---------- STATUS LINKS ----------
+    # ---------- STATUS-LINKS ----------
     status_frame = tk.Frame(footer, bg=config.CARD)
     status_frame.pack(side="left")
 
@@ -34,12 +37,22 @@ def create_footer(parent, config):
 
     last_update_time = [None]
     disconnect_counter = [0]
+    _last_state = [None]
 
-    _last_state = [None]  # Merkt sich den letzten Zustand
+    # ---------- FLEXIBLES STATUS-SETZEN ----------
+    def set_status(arg1=None, arg2=None):
+        """
+        Universell:
+        - set_status(True/False/None) → LED-Status (Dashboard)
+        - set_status("Text", "Farbe") → Direkttext (z.B. Enlarged/Scatter)
+        """
+        # Modus: direkter Text + Farbe
+        if isinstance(arg1, str) and arg2:
+            status_led.delete("all")
+            status_text.config(text=arg1, fg=arg2)
+            return
 
-    def set_status(connected=None):
-        """Setzt LED und Textzustand (geglättet, verhindert Blinken)."""
-        # Wenn der Zustand gleich geblieben ist → nichts tun
+        connected = arg1
         if _last_state[0] == connected:
             return
         _last_state[0] = connected
@@ -55,7 +68,6 @@ def create_footer(parent, config):
             status_text.config(text="Connected", fg="lime green")
 
         else:
-            # kurze Verzögerung, um Flackern bei kurzen Unterbrechungen zu vermeiden
             status_led.after(
                 2000,
                 lambda: (
@@ -123,6 +135,7 @@ def create_footer(parent, config):
     return set_status, mark_data_update
 
 
+# ---------- Light-Version ----------
 def create_footer_light(parent, config=None):
     """Kleiner Footer ohne Statusanzeige – nur Version & GitHub-Link."""
     bg = getattr(config, "CARD", "#1e2a38")

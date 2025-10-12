@@ -40,15 +40,19 @@ def open_window(parent, config=config, utils=utils):
     win.geometry("1200x900")
     win.configure(bg=config.BG)
 
- # ---------- HEADER ----------
+# ---------- HEADER ----------
     header = tk.Frame(win, bg="#0d231d")
     header.pack(side="top", fill="x", padx=10, pady=8)
 
     left_frame = tk.Frame(header, bg="#0d231d")
     left_frame.pack(side="left", padx=6)
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
-    logo_path = os.path.join(assets_dir, "Logo.png")
+    # Logo-Pfad: prüft sowohl widgets/assets als auch Hauptordner/assets
+    here = os.path.dirname(__file__)
+    cand1 = os.path.join(here, "assets", "Logo.png")
+    cand2 = os.path.join(os.path.dirname(here), "assets", "Logo.png")
+    logo_path = cand1 if os.path.exists(cand1) else cand2
+
     if os.path.exists(logo_path):
         try:
             img = Image.open(logo_path).resize((90, 90), Image.LANCZOS)
@@ -69,6 +73,9 @@ def open_window(parent, config=config, utils=utils):
         justify="left"
     )
     title.pack(side="left", anchor="center")
+
+
+
 
     # ---------- HEADER CONTROLS ----------
     controls = tk.Frame(header, bg="#0d231d")

@@ -78,16 +78,16 @@ def create_charts(root, config, log):
         # ---------- Wert (groß) ----------
         lbl_value = tk.Label(
             card, text="--", fg=color, bg=config.CARD,
-            font=("Segoe UI", 36, "bold"), anchor="w"
+            font=("Segoe UI", 40, "bold"), anchor="w"
         )
         lbl_value.place(relx=0.05, rely=0.10, anchor="w")
 
         # ---------- Titel (höher) ----------
         lbl_title = tk.Label(
             card, text=title, fg=color, bg=config.CARD,
-            font=("Segoe UI", 17, "bold"), anchor="w"
+            font=("Segoe UI", 19, "bold"), anchor="w"
         )
-        lbl_title.place(relx=0.05, rely=0.25, anchor="w")
+        lbl_title.place(relx=0.05, rely=0.22, anchor="w")
 
         # ---------- Klick öffnet enlarged ----------
         def make_open(k=key):
