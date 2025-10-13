@@ -24,6 +24,8 @@ CARD_LAYOUT = [
 
 def create_charts(root, config, log):
     """Erzeugt 6-Karten Dashboard mit Auto-Switch Compact ↔ Full + dynamischer Y-Skalierung"""
+    global data_buffers, time_buffer
+
     log("📊 Chart-Grid initialisiert")
 
     frame = tk.Frame(root, bg=config.BG)
@@ -190,5 +192,7 @@ def create_charts(root, config, log):
 
         root.after(3000, update)
 
+
+
     update()
-    return frame
+    return frame, data_buffers, data_buffers["timestamps"]    

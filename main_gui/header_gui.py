@@ -81,7 +81,6 @@ def update_leaf_offset(*_):
 def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: None):
     """Erzeugt den GUI-Header."""
     header = tk.Frame(root, bg=config.CARD)
-    header.pack(side="top", fill="x", padx=10, pady=8)
 
     # ---------- LOGO + TITEL ----------
     from PIL import Image, ImageTk
@@ -193,11 +192,22 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     row2.pack(side="top", pady=2)
 
     # ---------- BUTTON-FUNKTIONEN ----------
+
     def reset_charts():
-        for buf in data_buffers.values():
-            buf.clear()
-        time_buffer.clear()
-        print("Charts reset")
+        """Leert alle Datenpuffer aus charts_gui, ohne das Dashboard neu zu laden."""
+        try:
+            import main_gui.charts_gui as charts_gui
+            if hasattr(charts_gui, "data_buffers"):
+                for key, buf in charts_gui.data_buffers.items():
+                    if isinstance(buf, list):
+                        buf.clear()
+                if "timestamps" in charts_gui.data_buffers:
+                    charts_gui.data_buffers["timestamps"].clear()
+                print("✅ Charts erfolgreich zurückgesetzt.")
+            else:
+                print("⚠️ Keine Datenpuffer in charts_gui gefunden.")
+        except Exception as e:
+            print(f"⚠️ Fehler beim Chart-Reset: {e}")
 
     def delete_config():
         from tkinter import messagebox
@@ -296,7 +306,7 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
             print(f"⚠️ Fehler im GrowHub CSV Viewer: {e}")
 
     # ---------- BUTTONS ----------
-    tk.Button(row1, text="Reset Charts", command=reset_charts).pack(side="left", padx=6)
+    tk.Button(row1, text="🧹 Reset Charts", command=reset_charts).pack(side="left", padx=6)
     tk.Button(row1, text="🗑 Delete Config", command=delete_config).pack(side="left", padx=6)
     tk.Button(row1, text="💾 Export Chart", command=export_chart).pack(side="left", padx=6)
 

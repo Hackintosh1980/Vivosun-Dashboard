@@ -2,13 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 core_gui.py – Hauptfenster des 🌱 VIVOSUN Thermo Dashboard
-Bindet Header, Charts-Platzhalter, Log und Footer ein.
+Bindet Header, Charts, Log und Footer ein.
 """
 
 import tkinter as tk
 import json
 from collections import deque
-from tkinter import TclError
 
 import config, utils
 from main_gui.header_gui import build_header
@@ -16,7 +15,6 @@ from widgets.footer_widget import create_footer
 from async_reader import start_reader_thread, set_log_callback, set_status_callback
 from main_gui.log_gui import create_log_frame
 from main_gui.charts_gui import create_charts
-from PIL import Image, ImageTk  # bleibt hier, falls später Bilder gebraucht werden
 
 
 def run_app(device_id=None):
@@ -26,18 +24,25 @@ def run_app(device_id=None):
     root.geometry("1600x900")
     root.configure(bg=getattr(config, "BG", "#0b1620"))
 
-    # ---------- HEADER ----------
-    header = build_header(root, config, {}, {}, lambda msg=None: None)
+    # Haupt-Container (ordnet alles vertikal)
+    main_frame = tk.Frame(root, bg=config.BG)
+    main_frame.pack(fill="both", expand=True)
+    main_frame.pack_propagate(False)
 
-    # ---------- LOG ----------
-    log, _app_closing = create_log_frame(root, config)
-    log("🌱 Dashboard gestartet – Logsystem aktiv")
+    # ---------- HEADER ----------
+    header = build_header(main_frame, config, {}, {}, lambda msg=None: None)
+    header.pack(side="top", fill="x", padx=10, pady=6)
 
     # ---------- CHARTS ----------
-    charts_frame = create_charts(root, config, log)
+    charts_frame, data_buffers, time_buffer = create_charts(main_frame, config, lambda *a, **k: None)
+    charts_frame.pack(side="top", fill="both", expand=True, padx=10, pady=(4, 6))
+
+    # ---------- LOG ----------
+    log, _app_closing = create_log_frame(main_frame, config)
+    log("🌱 Dashboard gestartet – Logsystem aktiv")
 
     # ---------- FOOTER ----------
-    set_status, mark_data_update = create_footer(root, config)
+    set_status, mark_data_update = create_footer(main_frame, config)
     try:
         set_status(False)
     except Exception:
@@ -55,44 +60,30 @@ def run_app(device_id=None):
 
     # ---------- STATUS WATCHER ----------
     def update_status_from_file():
-        """Liest periodisch status.json und aktualisiert LED."""
         try:
             with open(config.STATUS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            connected = data.get("connected", False)
-            set_status(connected)
+            set_status(data.get("connected", False))
         except Exception:
             pass
-        root.after(2000, update_status_from_file)  # alle 2 Sekunden prüfen
+        root.after(2000, update_status_from_file)
 
     update_status_from_file()
 
-# ---------- SHUTDOWN HANDLER ----------
+    # ---------- SHUTDOWN ----------
     def on_close():
-        """Sauberer Programm-Shutdown (Reader + GUI)."""
-        # Log-Callback stummschalten / App schließt
         try:
             _app_closing[0] = True
         except Exception:
             pass
-
-        # Reader beenden
         try:
             from async_reader import stop_reader
             log("[🧹] Stoppe Async-Reader …")
             stop_reader()
         except Exception as e:
             log(f"⚠️ Fehler beim Stoppen des Readers: {e}")
-
-        # Mainloop beenden und Fenster sicher zerstören
-        try:
-            root.quit()
-        except Exception:
-            pass
-        try:
-            root.after(50, root.destroy)
-        except Exception:
-            pass
+        root.quit()
+        root.after(50, root.destroy)
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()
