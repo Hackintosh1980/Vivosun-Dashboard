@@ -1,256 +1,285 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-header_gui.py – VIVOSUN Full-Green Theme 🌿
-mit korrekter °C / °F-Steuerung & Offset-Sync
+header_gui.py – Header mit stabilem, bidirektionalem Offset-Sync
 """
 
 import tkinter as tk
-import config, utils
-from PIL import Image, ImageTk
-import os
+import config
+import utils
 
-# ---------------------------------------------------------
-# Farben & Fonts
-# ---------------------------------------------------------
-BG_MAIN   = "#06110f"
-CARD_BG   = "#0d231d"
-LIME      = "#a8ff60"
-LIME_DARK = "#66cc33"
-ORANGE    = "#ffaa00"
-TEXT      = "#e5ffe5"
-FONT_TITLE = ("Segoe UI", 20, "bold")
-FONT_BTN   = ("Segoe UI", 10, "bold")
-FONT_LABEL = ("Segoe UI", 10, "bold")
-
+# --- Globale Tk-Variablen-Holder für externen Sync (werden in build_header gesetzt) ---
 leaf_offset_var = None
-hum_offset_var  = None
+hum_offset_var = None
 
-
-# ---------------------------------------------------------
-# Helper
-# ---------------------------------------------------------
-def styled_button(master, text, cmd, color=LIME):
-    return tk.Button(
-        master, text=text, command=cmd,
-        bg=color, fg="black", font=FONT_BTN,
-        activebackground=LIME_DARK, activeforeground="black",
-        relief="flat", padx=12, pady=6, cursor="hand2",
-        highlightbackground=LIME_DARK, highlightthickness=2
-    )
-
-
-def add_stepper_field(parent, label, var, step, unit=""):
-    frame = tk.Frame(parent, bg=CARD_BG, padx=6, pady=4)
-    tk.Label(frame, text=label, bg=CARD_BG, fg=LIME, font=FONT_LABEL).grid(row=0, column=0, rowspan=2, sticky="w")
-
-    entry = tk.Entry(
-        frame, textvariable=var, width=6, justify="center",
-        bg="#072017", fg=TEXT, insertbackground=TEXT,
-        relief="flat", highlightthickness=2, highlightcolor=LIME
-    )
-    entry.grid(row=0, column=1, rowspan=2, padx=(10, 6))
-
-    def step_val(delta):
-        try:
-            v = float(var.get()) + delta
-        except Exception:
-            v = 0.0
-        var.set(round(v, 2))
-
-    tk.Button(frame, text="▲", bg=LIME, fg="black",
-              font=("Segoe UI", 11, "bold"), width=3,
-              relief="flat", command=lambda: step_val(+step)).grid(row=0, column=2)
-    tk.Button(frame, text="▼", bg=LIME, fg="black",
-              font=("Segoe UI", 11, "bold"), width=3,
-              relief="flat", command=lambda: step_val(-step)).grid(row=1, column=2)
-
-    if unit:
-        tk.Label(frame, text=unit, bg=CARD_BG, fg="#99ff99", font=("Segoe UI", 9, "bold")
-        ).grid(row=0, column=3, rowspan=2, padx=(6, 0))
-    return frame
-
-
-# ---------------------------------------------------------
-# Offset-Sync
-# ---------------------------------------------------------
-def sync_offsets_to_gui(unit_celsius: bool):
-    """GUI zeigt Werte in der aktuellen Einheit"""
+def sync_offsets_to_gui():
+    """Setzt die Header-Spinboxen auf die aktuellen config-Werte (sicher, auch wenn GUI noch nicht gebaut)."""
     try:
         if isinstance(leaf_offset_var, tk.DoubleVar):
-            val_c = float(config.leaf_offset_c[0])
-            leaf_offset_var.set(val_c if unit_celsius else val_c * 9.0 / 5.0)
+            leaf_offset_var.set(float(config.leaf_offset_c[0]))
         if isinstance(hum_offset_var, tk.DoubleVar):
             hum_offset_var.set(float(config.humidity_offset[0]))
     except Exception:
         pass
 
-
 def set_offsets_from_outside(leaf=None, hum=None, persist=True):
-    """Speichert neue Offsets (immer in °C)"""
+    """
+    Externer Eintrittspunkt (z.B. aus scattered_vpd_chart):
+    - übernimmt neue Offsets in config (Leaf in °C, Hum in %),
+    - persistiert optional,
+    - spiegelt zurück in die Header-Spinboxen.
+    """
     try:
         if leaf is not None:
             config.leaf_offset_c[0] = float(leaf)
         if hum is not None:
             config.humidity_offset[0] = float(hum)
+
         if persist:
-            cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-            cfg["leaf_offset"] = config.leaf_offset_c[0]
-            cfg["humidity_offset"] = config.humidity_offset[0]
-            utils.safe_write_json(config.CONFIG_FILE, cfg)
+            try:
+                cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+                cfg["leaf_offset"] = config.leaf_offset_c[0]
+                cfg["humidity_offset"] = config.humidity_offset[0]
+                utils.safe_write_json(config.CONFIG_FILE, cfg)
+            except Exception:
+                pass
+
+        sync_offsets_to_gui()
     except Exception:
         pass
 
 
-# ---------------------------------------------------------
-# Hauptaufbau
-# ---------------------------------------------------------
 def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: None):
-    header = tk.Frame(root, bg=CARD_BG)
-    header.pack(side="top", fill="x", padx=12, pady=8)
+    """Erzeugt den GUI-Header."""
+    header = tk.Frame(root, bg=config.CARD)
+    header.pack(side="top", fill="x", padx=10, pady=8)
 
-    # ---------- Logo + Titel ----------
-    left = tk.Frame(header, bg=CARD_BG)
-    left.pack(side="left", padx=6, pady=4)
+    # ---------- LOGO + TITEL ----------
+    import os
+    from PIL import Image, ImageTk
 
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "Logo.png")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logo_path = os.path.join(base_dir, "assets", "Logo.png")
+
+    left_frame = tk.Frame(header, bg=config.CARD)
+    left_frame.pack(side="left", padx=6, pady=4)
+
     if os.path.exists(logo_path):
         try:
-            img = Image.open(logo_path).resize((120, 100))
+            img = Image.open(logo_path).resize((120, 100), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
-            lbl = tk.Label(left, image=logo_img, bg=CARD_BG)
-            lbl.image = logo_img
-            lbl.pack(side="left", padx=(0, 10))
+            logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
+            logo_label.image = logo_img
+            logo_label.pack(side="left", padx=(0, 10))
         except Exception as e:
             print(f"⚠️ Logo konnte nicht geladen werden: {e}")
 
-    tk.Label(left, text="🌱 VIVOSUN Thermo Dashboard\n     for THB-1S",
-             bg=CARD_BG, fg=LIME, font=FONT_TITLE, anchor="w", justify="left").pack(side="left")
+    title = tk.Label(
+        left_frame,
+        text="🌱 VIVOSUN Thermo Dashboard\n     for THB-1S",
+        bg=config.CARD,
+        fg=config.TEXT,
+        font=("Segoe UI", 20, "bold"),
+        anchor="w",
+        justify="left"
+    )
+    title.pack(side="left", anchor="center")
 
-    # ---------- Offsets ----------
-    right = tk.Frame(header, bg=CARD_BG)
-    right.pack(side="right", pady=2)
+    # ---------- OFFSETS ----------
+    controls = tk.Frame(header, bg=config.CARD)
+    controls.pack(side="right", pady=2)
 
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-    unit_celsius = config.unit_celsius
+    unit_celsius = tk.BooleanVar(value=cfg.get("unit_celsius", True))
 
+    tk.Label(
+        controls,
+        text=f"Leaf Temp Offset ({'°C' if unit_celsius.get() else '°F'}):",
+        bg=config.CARD,
+        fg=config.TEXT
+    ).pack(side="left", padx=6)
+
+    # Globale Tk-Variablen für externen Sync setzen
     global leaf_offset_var, hum_offset_var
-    leaf_offset_var = tk.DoubleVar()
-    hum_offset_var  = tk.DoubleVar()
-
-    # Startwerte anzeigen
-    sync_offsets_to_gui(unit_celsius)
+    leaf_offset_var = tk.DoubleVar(value=float(config.leaf_offset_c[0]))
 
     def update_leaf_offset(*_):
         try:
             val = float(leaf_offset_var.get())
-            c_val = val if unit_celsius else val * 5.0 / 9.0
-            set_offsets_from_outside(leaf=c_val)
+            # In config IMMER in °C speichern
+            c_val = val if unit_celsius.get() else (val * 5.0 / 9.0)
+            set_offsets_from_outside(leaf=c_val, hum=None, persist=True)
         except Exception:
-            pass
+            set_offsets_from_outside(leaf=0.0, hum=None, persist=True)
+
+    leaf_offset_var.trace_add("write", update_leaf_offset)
+
+    tk.Spinbox(
+        controls,
+        textvariable=leaf_offset_var,
+        from_=-10.0, to=10.0, increment=0.1,
+        width=6,
+        bg=config.CARD,
+        fg=config.TEXT,
+        justify="center"
+    ).pack(side="left")
+
+    tk.Label(
+        controls,
+        text="Humidity Offset (%):",
+        bg=config.CARD,
+        fg=config.TEXT
+    ).pack(side="left", padx=6)
+
+    hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
 
     def update_hum_offset(*_):
         try:
-            set_offsets_from_outside(hum=float(hum_offset_var.get()))
+            set_offsets_from_outside(leaf=None, hum=float(hum_offset_var.get()), persist=True)
         except Exception:
-            pass
+            set_offsets_from_outside(leaf=None, hum=0.0, persist=True)
 
-    leaf_offset_var.trace_add("write", update_leaf_offset)
     hum_offset_var.trace_add("write", update_hum_offset)
 
-    add_stepper_field(right, f"Leaf Offset ({'°C' if unit_celsius else '°F'})",
-                      leaf_offset_var, 0.1, "°").pack(side="left", padx=6)
-    add_stepper_field(right, "Humidity Offset (%)", hum_offset_var, 0.5, "%").pack(side="left", padx=6)
+    tk.Spinbox(
+        controls,
+        textvariable=hum_offset_var,
+        from_=-20.0, to=20.0, increment=0.5,
+        width=6,
+        bg=config.CARD,
+        fg=config.TEXT,
+        justify="center"
+    ).pack(side="left")
 
-    styled_button(right, "↺ Reset Offsets",
-                  lambda: (leaf_offset_var.set(0.0), hum_offset_var.set(0.0)), ORANGE).pack(side="left", padx=8)
+    # ---------- RESET BUTTON ----------
+    def reset_offsets():
+        # Spinboxen setzen -> Trace setzt config & persistiert & spiegelt zurück
+        leaf_offset_var.set(0.0)
+        hum_offset_var.set(0.0)
+        print("Offsets reset (Leaf=0.0°C, Humidity=0.0%)")
 
-    # ---------- Buttons ----------
-    btn_row = tk.Frame(header, bg=CARD_BG)
-    btn_row.pack(side="bottom", fill="x", pady=4)
+    tk.Button(
+        controls,
+        text="↺ Reset Offsets",
+        command=reset_offsets,
+        bg="orange",
+        fg="black"
+    ).pack(side="left", padx=6)
 
+    # ---------- BUTTON-ROWS ----------
+    button_frame = tk.Frame(header, bg=config.CARD)
+    button_frame.pack(side="bottom", fill="x", pady=4)
+
+    row1 = tk.Frame(button_frame, bg=config.CARD)
+    row1.pack(side="top", pady=2)
+
+    row2 = tk.Frame(button_frame, bg=config.CARD)
+    row2.pack(side="top", pady=2)
+
+    # ---------- BUTTON-FUNKTIONEN ----------
     def reset_charts():
         for buf in data_buffers.values():
             buf.clear()
         time_buffer.clear()
-        log("📉 Charts reset")
+        print("Charts reset")
 
     def delete_config():
         from tkinter import messagebox
-        if os.path.exists(config.CONFIG_FILE) and messagebox.askyesno("Confirm", "Delete config.json?"):
-            os.remove(config.CONFIG_FILE)
-            log("🗑 config.json deleted ✅")
+        import os
+        if os.path.exists(config.CONFIG_FILE):
+            if messagebox.askyesno("Confirm", "Delete config.json?"):
+                try:
+                    os.remove(config.CONFIG_FILE)
+                    print("config.json deleted ✅")
+                except Exception as e:
+                    print(f"❌ Error deleting config.json: {e}")
+        else:
+            print("⚠️ config.json not found")
 
     def export_chart():
         from tkinter import filedialog
-        import csv, datetime
+        import csv, datetime, os
         try:
             export_dir = filedialog.askdirectory(title="Exportziel wählen", mustexist=True)
             if not export_dir:
+                print("❌ Export abgebrochen – kein Ordner gewählt")
                 return
-            ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-            path = os.path.join(export_dir, f"chart_export_{ts}.csv")
+
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+            filename = f"chart_export_{timestamp}.csv"
+            path = os.path.join(export_dir, filename)
+
             with open(path, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(["Timestamp", "t_main", "h_main", "vpd_int", "t_ext", "h_ext", "vpd_ext"])
+                writer = csv.writer(f)
+                writer.writerow([
+                    "Timestamp(30 mins)",
+                    "Inside Temperature(℃)",
+                    "Inside Humidity(%)",
+                    "Inside VPD(kPa)",
+                    "Outside Temperature(℃)",
+                    "Outside Humidity(%)",
+                    "Outside VPD(kPa)",
+                ])
                 for i in range(len(time_buffer)):
-                    ts_str = time_buffer[i].strftime("%Y-%m-%d %H:%M:%S")
-                    w.writerow([ts_str] + [data_buffers[k][i] if i < len(data_buffers[k]) else "" for k in
-                                           ["t_main", "h_main", "vpd_int", "t_ext", "h_ext", "vpd_ext"]])
-            log(f"💾 CSV exportiert → {path}")
+                    ts = time_buffer[i].strftime("%Y-%m-%d %H:%M:%S") if i < len(time_buffer) else ""
+                    row = [
+                        ts,
+                        data_buffers["t_main"][i] if i < len(data_buffers["t_main"]) else "",
+                        data_buffers["h_main"][i] if i < len(data_buffers["h_main"]) else "",
+                        data_buffers["vpd_int"][i] if i < len(data_buffers["vpd_int"]) else "",
+                        data_buffers["t_ext"][i] if i < len(data_buffers["t_ext"]) else "",
+                        data_buffers["h_ext"][i] if i < len(data_buffers["h_ext"]) else "",
+                        data_buffers["vpd_ext"][i] if i < len(data_buffers["vpd_ext"]) else "",
+                    ]
+                    writer.writerow(row)
+
+            print(f"💾 CSV exportiert → {path}")
         except Exception as e:
-            log(f"❌ CSV-Export-Fehler: {e}")
+            print(f"❌ CSV-Export fehlgeschlagen: {e}")
 
     def restart_program():
-        import sys
-        log("🔄 Restarting program…")
-        os.execl(sys.executable, sys.executable, *sys.argv)
+        import sys, os
+        print("🔄 Restarting program...")
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 
-# ---------- EXTERNE FENSTER ----------
+    # ---------- FENSTER-FUNKTIONEN ----------
     open_windows = {}
 
     def open_scattered_vpd():
-        """Öffnet das Scatter-Chart-Fenster (widgets/scattered_vpd_chart.py)."""
         try:
             if "scatter" in open_windows and open_windows["scatter"].winfo_exists():
                 open_windows["scatter"].lift()
                 return
-            from widgets import scattered_vpd_chart
+            import scattered_vpd_chart
             win = scattered_vpd_chart.open_window(root, config, utils)
             open_windows["scatter"] = win
             win.protocol("WM_DELETE_WINDOW", lambda: (open_windows.pop("scatter", None), win.destroy()))
-            log("📈 Scatter-Fenster geöffnet")
         except Exception as e:
-            log(f"⚠️ Fehler beim Öffnen des Scatter-Fensters: {e}")
+            print(f"⚠️ Could not open scattered VPD chart: {e}")
 
     def open_growhub_csv():
-        """Öffnet den GrowHub-CSV-Viewer (widgets/growhub_csv_viewer.py)."""
         try:
             if "csv" in open_windows and open_windows["csv"].winfo_exists():
                 open_windows["csv"].lift()
                 return
-            from widgets import growhub_csv_viewer
+            import growhub_csv_viewer
             win = growhub_csv_viewer.open_window(root, config=config)
             open_windows["csv"] = win
             win.protocol("WM_DELETE_WINDOW", lambda: (open_windows.pop("csv", None), win.destroy()))
-            log("📊 GrowHub-Fenster geöffnet")
         except Exception as e:
-            log(f"⚠️ Fehler beim Öffnen des GrowHub-Fensters: {e}")
+            print(f"⚠️ Fehler im GrowHub CSV Viewer: {e}")
 
+    # ---------- BUTTONS ----------
+    tk.Button(row1, text="Reset Charts", command=reset_charts).pack(side="left", padx=6)
+    tk.Button(row1, text="🗑 Delete Config", command=delete_config).pack(side="left", padx=6)
+    tk.Button(row1, text="💾 Export Chart", command=export_chart).pack(side="left", padx=6)
 
-            
-    # ---------- Button-Reihen ----------
-    row1 = tk.Frame(btn_row, bg=CARD_BG)
-    row1.pack(side="top", pady=2)
-    row2 = tk.Frame(btn_row, bg=CARD_BG)
-    row2.pack(side="top", pady=2)
+    tk.Button(row2, text="📈 VPD Scatter", command=open_scattered_vpd).pack(side="left", padx=6)
+    tk.Button(row2, text="📊 GrowHub CSV", command=open_growhub_csv).pack(side="left", padx=6)
+    tk.Button(row2, text="🔄 Restart Program", command=restart_program).pack(side="left", padx=6)
 
-    styled_button(row1, "📉 Reset Charts", reset_charts).pack(side="left", padx=6)
-    styled_button(row1, "🗑 Delete Config", delete_config, ORANGE).pack(side="left", padx=6)
-    styled_button(row1, "💾 Export Chart", export_chart).pack(side="left", padx=6)
-
-    styled_button(row2, "📈 VPD Scatter", open_scattered_vpd).pack(side="left", padx=6)
-    styled_button(row2, "📊 GrowHub CSV", open_growhub_csv).pack(side="left", padx=6)
-    styled_button(row2, "🔄 Restart Program", restart_program, ORANGE).pack(side="left", padx=6)
+    # Nach Aufbau einmal sicherstellen, dass GUI-Spinboxen exakt config zeigen
+    sync_offsets_to_gui()
 
     return header
