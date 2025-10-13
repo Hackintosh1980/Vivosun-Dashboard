@@ -88,7 +88,6 @@ def sanitize(value):
         return None
     try:
         v = float(value)
-        # ⚙️ Neue Logik: erkennt negative Nullwerte wie -0.06
         if -0.1 <= v <= 0.0:
             _safe_log(_log_callback, f"⚠️ Sensor liefert negativen Nullwert ({v:.2f}) → ignoriert")
             return None
@@ -96,16 +95,40 @@ def sanitize(value):
     except Exception:
         return None
 
+
+def _clear_data_file():
+    """Leert die Thermo-Werte-Datei bei Verbindungsverlust."""
+    try:
+        empty_payload = {
+            "timestamp": None,
+            "t_main": None,
+            "h_main": None,
+            "t_ext": None,
+            "h_ext": None,
+        }
+        utils.safe_write_json(resource_path(config.DATA_FILE), empty_payload)
+        _safe_log(_log_callback, "🧹 DATA_FILE geleert (Verbindungsverlust).")
+    except Exception as e:
+        _safe_log(_log_callback, f"⚠️ DATA_FILE konnte nicht geleert werden: {e}")
+
+
 def _update_status(connected: bool, sensor_ok: bool):
-    """Schreibt status.json nur, wenn sich der Zustand wirklich geändert hat."""
+    """Schreibt status.json nur, wenn sich der Zustand wirklich geändert hat.
+    Wenn keine Verbindung besteht, wird auch DATA_FILE geleert.
+    """
     try:
         old = utils.safe_read_json(STATUS_FILE) or {}
         if old.get("connected") == connected and old.get("sensor_ok") == sensor_ok:
             return
+
         utils.safe_write_json(STATUS_FILE, {"connected": connected, "sensor_ok": sensor_ok})
         _status(connected)
-    except Exception:
-        pass
+
+        if not connected:
+            _clear_data_file()
+
+    except Exception as e:
+        _safe_log(_log_callback, f"⚠️ Fehler im Status-Update: {e}")
 
 
 # -------------------------------------------------------------------

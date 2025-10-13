@@ -94,6 +94,11 @@ def create_charts(root, config, log):
                 root.after(3000, update)
                 return
 
+            # Wenn alle Werte None sind → keine toten Daten anhängen
+            if all(v is None for v in d.values()):
+                root.after(3000, update)
+                return
+
             ts = datetime.datetime.now()
             data_buffers["timestamps"].append(ts)
 
@@ -111,8 +116,15 @@ def create_charts(root, config, log):
                     if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid_remove()
 
+            # --- Automatische Wiederaufnahme ---
             for _, key, _ in CARD_LAYOUT:
                 val = d.get(key)
+
+                # Wenn DATA_FILE leer (None), Puffer nicht updaten
+                if val is None and all(v is None for v in d.values()):
+                    continue
+
+                # VPD dynamisch nachrechnen
                 if key.startswith("vpd_") and val is None:
                     if key == "vpd_int" and d.get("t_main") and d.get("h_main"):
                         val = utils.calc_vpd(
@@ -124,10 +136,15 @@ def create_charts(root, config, log):
                             d["t_ext"] + config.leaf_offset_c[0],
                             d["h_ext"] + config.humidity_offset[0]
                         )
-                data_buffers[key].append(val if val is not None else None)
-                data_buffers[key] = data_buffers[key][-200:]
+
+                # Nur hinzufügen, wenn gültig
+                if val is not None:
+                    data_buffers[key].append(val)
+                    data_buffers[key] = data_buffers[key][-200:]
+
             data_buffers["timestamps"] = data_buffers["timestamps"][-200:]
 
+            # --- Zeichnen ---
             for i, (title, key, color) in enumerate(CARD_LAYOUT):
                 if mode["compact"] and key.startswith("t_ext"):
                     continue
@@ -192,7 +209,5 @@ def create_charts(root, config, log):
 
         root.after(3000, update)
 
-
-
     update()
-    return frame, data_buffers, data_buffers["timestamps"]    
+    return frame, data_buffers, data_buffers["timestamps"]
