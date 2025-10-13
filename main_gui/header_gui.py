@@ -22,7 +22,6 @@ hum_offset_var = None
 # ===============================================================
 #   🔧 Offset-Synchronisation (Config ↔ GUI)
 # ===============================================================
-
 def sync_offsets_to_gui():
     """Aktualisiert die GUI-Spinboxen anhand der gespeicherten Werte in config."""
     try:
@@ -267,6 +266,21 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         python = sys.executable
         os.execl(python, python, *sys.argv)
 
+
+# --- SETTINGS BUTTON ---
+    def open_settings():
+        """Öffnet das Settings-Fenster (lazy import, um Zyklus zu vermeiden)."""
+        try:
+            import main_gui.settings_gui as settings_gui
+            settings_gui.open_settings_window(root, log)
+        except Exception as e:
+            print(f"⚠️ Fehler beim Öffnen der Settings: {e}")
+            try:
+                log(f"⚠️ Fehler beim Öffnen der Settings: {e}")
+            except Exception:
+                pass
+
+   
     # ---------- FENSTER-FUNKTIONEN ----------
     open_windows = {}
 
@@ -309,7 +323,7 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     tk.Button(row1, text="🧹 Reset Charts", command=reset_charts).pack(side="left", padx=6)
     tk.Button(row1, text="🗑 Delete Config", command=delete_config).pack(side="left", padx=6)
     tk.Button(row1, text="💾 Export Chart", command=export_chart).pack(side="left", padx=6)
-
+    tk.Button(row1, text="⚙️ Settings", command=open_settings, bg="#1e8f4a", fg="white", font=("Segoe UI", 10, "bold")).pack(side="left", padx=6)
     tk.Button(row2, text="📈 VPD Scatter", command=open_scattered_vpd).pack(side="left", padx=6)
     tk.Button(row2, text="📊 GrowHub CSV", command=open_growhub_csv).pack(side="left", padx=6)
     tk.Button(row2, text="🔄 Restart Program", command=restart_program).pack(side="left", padx=6)

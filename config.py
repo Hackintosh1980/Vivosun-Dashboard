@@ -61,3 +61,15 @@ RECONNECT_DELAY = 3            # Sekunden zwischen Reconnect-Versuchen
 
 leaf_offset_c   = [0.0]        # Leaf-Temp-Offset (°C)
 humidity_offset = [0.0]        # Humidity-Offset (%)
+
+
+
+
+
+# =====================================================
+#                 ANZEIGE / FORMATIERUNG
+# =====================================================
+
+TEMP_DECIMALS = 1        # Nachkommastellen für Temperatur (°C/°F)
+HUMID_DECIMALS = 1       # Nachkommastellen für Luftfeuchte (%)
+VPD_DECIMALS  = 2        # Nachkommastellen für VPD (kPa)

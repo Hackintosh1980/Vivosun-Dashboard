@@ -36,13 +36,6 @@ def create_charts(root, config, log):
 
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     use_celsius = cfg.get("unit_celsius", True)
-    temp_decimals = cfg.get("TEMP_DECIMALS", getattr(config, "TEMP_DECIMALS", 1))
-    hum_decimals  = cfg.get("HUMID_DECIMALS", getattr(config, "HUMID_DECIMALS", 1))
-    vpd_decimals  = cfg.get("VPD_DECIMALS", getattr(config, "VPD_DECIMALS", 2))
-
-
-
-
 
     mode = {"compact": True}
     log("[AUTO] Initial mode → Compact")
@@ -131,6 +124,13 @@ def create_charts(root, config, log):
                 for i, (_, key) in enumerate(cards):
                     if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid()
+
+                # 🧩 Charts neu initialisieren (nur externe Buffers leeren)
+                for key in ["t_ext", "h_ext", "vpd_ext"]:
+                    if key in data_buffers and isinstance(data_buffers[key], list):
+                        data_buffers[key].clear()
+                log("🔁 Sensor wieder aktiv – Charts neu gestartet")
+
             elif not ext_ok and not mode["compact"]:
                 log("[AUTO] switched → Compact (no external sensor)")
                 mode["compact"] = True
@@ -138,11 +138,15 @@ def create_charts(root, config, log):
                     if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid_remove()
 
-            # --- Automatische Wiederaufnahme ---
+            # --- Datenpuffer aktualisieren ---
             for _, key, _ in CARD_LAYOUT:
                 val = d.get(key)
 
-                # VPD dynamisch nachrechnen, falls nötig
+                # Wenn keine gültigen Werte vorhanden → überspringen
+                if val is None and all(v is None for v in d.values()):
+                    continue
+
+                # VPD dynamisch nachrechnen
                 if key.startswith("vpd_") and val is None:
                     if key == "vpd_int" and d.get("t_main") and d.get("h_main"):
                         val = utils.calc_vpd(
@@ -155,14 +159,13 @@ def create_charts(root, config, log):
                             d["h_ext"] + config.humidity_offset[0]
                         )
 
-                # Nur gültige Werte hinzufügen
                 if val is not None:
                     data_buffers[key].append(val)
                     data_buffers[key] = data_buffers[key][-200:]
 
             data_buffers["timestamps"] = data_buffers["timestamps"][-200:]
 
-            # --- Zeichnen der Charts ---
+            # --- Charts zeichnen ---
             for i, (title, key, color) in enumerate(CARD_LAYOUT):
                 if mode["compact"] and key.startswith("t_ext"):
                     continue
@@ -207,16 +210,15 @@ def create_charts(root, config, log):
                 ax.set_xlabel("", color="#777", fontsize=7)
                 ax.set_ylabel("", color="#777", fontsize=7)
 
-                # --- Dynamische Nachkommastellen ---
                 if val is not None:
                     if key.startswith("t_"):
                         disp_val = val if use_celsius else utils.c_to_f(val)
                         unit = "°C" if use_celsius else "°F"
-                        lbl.config(text=f"{disp_val:.{temp_decimals}f}{unit}")
+                        lbl.config(text=f"{disp_val:.1f}{unit}")
                     elif key.startswith("h_"):
-                        lbl.config(text=f"{val:.{hum_decimals}f}%")
+                        lbl.config(text=f"{val:.1f}%")
                     else:
-                        lbl.config(text=f"{val:.{vpd_decimals}f} kPa")
+                        lbl.config(text=f"{val:.2f} kPa")
                 else:
                     lbl.config(text="--")
 
