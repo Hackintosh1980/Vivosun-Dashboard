@@ -94,8 +94,20 @@ def create_charts(root, config, log):
                 root.after(3000, update)
                 return
 
-            # Wenn alle Werte None sind → keine toten Daten anhängen
-            if all(v is None for v in d.values()):
+            # 🔧 Wenn alle Werte None oder 0.0 sind → Dashboard zurücksetzen
+            if all(d.get(k) in (None, 0.0) for k in ["t_main", "h_main", "t_ext", "h_ext"]):
+                for key in data_buffers.keys():
+                    data_buffers[key].clear()
+                for lbl in labels:
+                    lbl.config(text="--")
+                for ax in axes:
+                    ax.clear()
+                    ax.set_facecolor(config.CARD)
+                    ax.grid(True, color="#333", linestyle=":", alpha=0.35)
+                    ax.tick_params(colors="#666", labelsize=7)
+                for fig in figs:
+                    fig.canvas.draw_idle()
+                log("⚠️ Keine gültigen Sensordaten – Dashboard zurückgesetzt")
                 root.after(3000, update)
                 return
 
