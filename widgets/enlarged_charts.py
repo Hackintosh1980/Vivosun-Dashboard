@@ -34,10 +34,7 @@ def open_window(parent, data_buffers, focus_key="t_main"):
     title, color, ylabel = mapping.get(focus_key, ("Unknown", "white", ""))
     import config, utils
 
-    # Zeitpuffer übernehmen (aus Charts)
     time_buffer = data_buffers.get("timestamps", [])
-
-    # Temperatureinheit (GUI-global)
     unit_celsius = tk.BooleanVar(value=True)
 
     return _open_enlarged(parent, config, utils,
@@ -47,13 +44,12 @@ def open_window(parent, data_buffers, focus_key="t_main"):
 
 
 # -------------------------------------------------------------------
-# Hauptfenster (ursprünglich open_window)
+# Hauptfenster
 # -------------------------------------------------------------------
 def _open_enlarged(parent, config, utils,
                    key, title, color, ylabel,
                    data_buffers, time_buffer, unit_celsius):
 
-    # ---------- Fenster ----------
     win = tk.Toplevel(parent)
     win.title(f"🔍 {title} – Enlarged View")
     win.geometry("1400x900")
@@ -61,12 +57,13 @@ def _open_enlarged(parent, config, utils,
 
     # ---------- HEADER ----------
     header = tk.Frame(win, bg=config.CARD)
-    header.pack(side="top", fill="x", padx=10, pady=8)
+    header.pack(side="top", fill="x", padx=10, pady=(10, 6))
 
     left = tk.Frame(header, bg=config.CARD)
     left.pack(side="left", padx=6)
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+    # Logo laden aus ../assets
+    assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
     logo_path = os.path.join(assets_dir, "Logo.png")
     if os.path.exists(logo_path):
         try:
@@ -77,13 +74,15 @@ def _open_enlarged(parent, config, utils,
             lbl.pack(side="left", padx=(0, 10))
         except Exception as e:
             print(f"⚠️ Logo konnte nicht geladen werden: {e}")
+    else:
+        print(f"⚠️ Logo nicht gefunden unter: {logo_path}")
 
     tk.Label(
         left,
         text=f"🌱 Enlarged – {title}",
         bg=config.CARD,
         fg=config.TEXT,
-        font=("Segoe UI", 18, "bold"),
+        font=("Segoe UI", 20, "bold"),
         anchor="w",
     ).pack(side="left", anchor="center")
 
@@ -92,13 +91,11 @@ def _open_enlarged(parent, config, utils,
     ax.set_facecolor("#121a24")
     ax.grid(True, linestyle="--", alpha=0.3)
     ax.tick_params(axis="y", labelcolor=config.TEXT)
-    ax.tick_params(axis="x", labelcolor=config.TEXT, rotation=0)
+    ax.tick_params(axis="x", labelcolor=config.TEXT)
     ax.set_ylabel(ylabel, color=config.TEXT, fontsize=11, weight="bold")
 
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
-
-    # Titel & Wert im Plot
     ax.set_title(title, color=color, fontsize=20, weight="bold", pad=8, loc="left")
 
     value_label = ax.text(
@@ -127,7 +124,7 @@ def _open_enlarged(parent, config, utils,
     paused = tk.BooleanVar(value=False)
     xs = []
 
-    # Zeitfenster-Auswahl (in Tagen)
+    # Zeitfenster-Auswahl
     SPANS_DAYS = {
         "1m": 1 / 1440,
         "15m": 15 / 1440,
@@ -143,7 +140,7 @@ def _open_enlarged(parent, config, utils,
     # Achsenformatierung abhängig vom Zeitfenster
     def apply_locator(span_days: float):
         if span_days <= 1 / 24:
-            ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=5))
+            ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
         elif span_days <= 1:
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
@@ -151,7 +148,9 @@ def _open_enlarged(parent, config, utils,
         else:
             ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+        canvas.draw_idle()
 
+    # Steuerungsleiste
     tk.Label(ctrl, text="⏱ Window:", bg=config.CARD, fg=config.TEXT).pack(side="left", padx=6)
     opt = tk.OptionMenu(ctrl, span_choice, *SPANS_DAYS.keys())
     opt.config(bg="lime", fg="black", font=("Segoe UI", 10, "bold"), activebackground="lime")
@@ -187,8 +186,11 @@ def _open_enlarged(parent, config, utils,
             win.after(1000, update)
             return
 
-        nonlocal xs
-        xs = [mdates.date2num(t) for t in time_buffer]
+        # time_buffer regelmäßig aktualisieren
+        time_buffer[:] = data_buffers.get("timestamps", [])
+        xs.clear()
+        xs.extend(mdates.date2num(time_buffer))
+
         ys = []
         for v in data_buffers.get(key, []):
             if v is None:
@@ -206,14 +208,10 @@ def _open_enlarged(parent, config, utils,
             ax.relim()
             ax.autoscale_view(scalex=False, scaley=True)
 
-            # Locator anpassen, wenn Zeitfenster geändert
+            # Wenn Zeitfenster geändert → Locator neu anwenden
             if span_choice.get() != _prev_span[0]:
                 apply_locator(span_days)
                 _prev_span[0] = span_choice.get()
-
-            # Auto-Zoom auf letzten Verlauf (sanft)
-            if len(xs) > 2:
-                ax.set_xlim(xs[-min(60, len(xs))], xs[-1])
 
             latest = ys[-1]
             if latest is not None and not (latest != latest):

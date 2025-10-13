@@ -42,29 +42,33 @@ def open_window(parent, config=config, utils=utils):
 
     # ---------- HEADER ----------
     header = tk.Frame(win, bg=config.CARD)
-    header.pack(side="top", fill="x", padx=10, pady=8)
+    header.pack(side="top", fill="x", padx=10, pady=(10, 6))
 
     left_frame = tk.Frame(header, bg=config.CARD)
     left_frame.pack(side="left", padx=6)
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+    # --- Logo laden (korrekter relativer Pfad aus /widgets heraus) ---
+    assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
     logo_path = os.path.join(assets_dir, "Logo.png")
     if os.path.exists(logo_path):
         try:
             img = Image.open(logo_path).resize((90, 90), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
             logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
-            logo_label.image = logo_img
-            logo_label.pack(side="left", padx=(0, 10))
+            logo_label.image = logo_img  # Referenz halten (Tkinter-Bug)
+            logo_label.pack(side="left", padx=(0, 12))
         except Exception as e:
             print(f"⚠️ Logo konnte nicht geladen werden: {e}")
+    else:
+        print(f"⚠️ Logo nicht gefunden unter: {logo_path}")
 
+    # --- Titel rechts neben Logo ---
     title = tk.Label(
         left_frame,
         text="🌱 VPD Comfort Chart",
         bg=config.CARD,
         fg=config.TEXT,
-        font=("Segoe UI", 20, "bold"),
+        font=("Segoe UI", 22, "bold"),  # größer & klarer
         anchor="w",
         justify="left"
     )
@@ -79,19 +83,17 @@ def open_window(parent, config=config, utils=utils):
 
     # Leaf Offset
     tk.Label(
-        controls, text=f"Leaf Offset ({'°C' if unit_celsius else '°F'}):",
-        bg=config.CARD, fg=config.TEXT
+        controls,
+        text=f"Leaf Offset ({'°C' if unit_celsius else '°F'}):",
+        bg=config.CARD,
+        fg=config.TEXT
     ).pack(side="left", padx=6)
 
     start_val_leaf = config.leaf_offset_c[0] if unit_celsius else (config.leaf_offset_c[0] * 9.0 / 5.0)
     leaf_offset_var = tk.DoubleVar(value=float(start_val_leaf))
 
     def on_leaf_offset_change(*_):
-        """
-        WICHTIG: Änderungen hier -> zentral über set_offsets_from_outside(),
-        damit Header-Spinboxen SOFORT gespiegelt werden (bidirektional).
-        In config IMMER °C speichern.
-        """
+        """Offset-Änderung mit sofortigem Header-Sync"""
         try:
             val = float(leaf_offset_var.get())
             c_val = val if unit_celsius else (val * 5.0 / 9.0)
@@ -101,9 +103,14 @@ def open_window(parent, config=config, utils=utils):
 
     leaf_offset_var.trace_add("write", on_leaf_offset_change)
     tk.Spinbox(
-        controls, textvariable=leaf_offset_var,
-        from_=-10.0, to=10.0, increment=0.1,
-        width=6, bg=config.CARD, fg=config.TEXT,
+        controls,
+        textvariable=leaf_offset_var,
+        from_=-10.0,
+        to=10.0,
+        increment=0.1,
+        width=6,
+        bg=config.CARD,
+        fg=config.TEXT,
         justify="center"
     ).pack(side="left")
 
@@ -116,10 +123,6 @@ def open_window(parent, config=config, utils=utils):
     hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
 
     def on_hum_offset_change(*_):
-        """
-        Änderungen hier -> set_offsets_from_outside(),
-        damit Header-Spinboxen SOFORT gespiegelt werden.
-        """
         try:
             set_offsets_from_outside(leaf=None, hum=float(hum_offset_var.get()), persist=True)
         except Exception:
@@ -127,25 +130,32 @@ def open_window(parent, config=config, utils=utils):
 
     hum_offset_var.trace_add("write", on_hum_offset_change)
     tk.Spinbox(
-        controls, textvariable=hum_offset_var,
-        from_=-50.0, to=50.0, increment=1.0,
-        width=6, bg=config.CARD, fg=config.TEXT,
+        controls,
+        textvariable=hum_offset_var,
+        from_=-50.0,
+        to=50.0,
+        increment=1.0,
+        width=6,
+        bg=config.CARD,
+        fg=config.TEXT,
         justify="center"
     ).pack(side="left")
 
-    # Reset Offsets (triggert Traces -> persist & GUI-Sync)
+    # Reset Offsets (triggert Traces)
     def reset_offsets():
         leaf_offset_var.set(0.0)
         hum_offset_var.set(0.0)
 
     tk.Button(
-        controls, text="↺ Reset Offsets",
+        controls,
+        text="↺ Reset Offsets",
         command=reset_offsets,
-        bg="orange", fg="black",
+        bg="orange",
+        fg="black",
         font=("Segoe UI", 10, "bold")
     ).pack(side="left", padx=8)
 
-    # Nach Aufbau: Header-Spinboxen auf aktuellen config-Stand spiegeln
+    # Nach Aufbau: aktuelle Werte synchronisieren
     try:
         sync_offsets_to_gui()
     except Exception:
@@ -203,14 +213,16 @@ def open_window(parent, config=config, utils=utils):
     canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=6)
 
     # ---------- FOOTER ----------
-    set_status, mark_data_update = create_footer(win, config)
+    try:
+        set_status, mark_data_update = create_footer(win, config)
+    except Exception as e:
+        print(f"⚠️ Footer konnte nicht geladen werden: {e}")
+        set_status = mark_data_update = lambda *a, **k: None
 
     # ---------- UPDATE LOOP ----------
     def update():
-        # Niemals komplett aussetzen – immer neu zeichnen (Offsets wirken sofort)
         d = utils.safe_read_json(config.DATA_FILE) or {}
 
-        # Offsets aus config lesen (falls Header geändert wurde)
         leaf_off = float(config.leaf_offset_c[0])
         hum_off = float(config.humidity_offset[0])
 
@@ -218,25 +230,20 @@ def open_window(parent, config=config, utils=utils):
         te, he = d.get("t_ext"), d.get("h_ext")
         vpd_int = vpd_ext = None
 
-        # --- Interner Punkt (unabhängig) ---
         if ti is not None and hi is not None:
             ti_eff, hi_eff = ti + leaf_off, hi + hum_off
             internal_dot.set_offsets([[ti_eff, hi_eff]])
             vpd_int = utils.calc_vpd(ti_eff, hi_eff)
         else:
-            internal_dot.set_offsets([])
-            vpd_int = None
+            internal_dot.set_offsets(np.empty((0, 2)))
 
-        # --- Externer Punkt (optional) ---
         if te is not None and he is not None:
             te_eff, he_eff = te + leaf_off, he + hum_off
             external_dot.set_offsets([[te_eff, he_eff]])
             vpd_ext = utils.calc_vpd(te_eff, he_eff)
         else:
-            external_dot.set_offsets([])
-            vpd_ext = None
+            external_dot.set_offsets(np.empty((0, 2)))
 
-        # --- Infotext immer aktualisieren ---
         unit = "°C" if unit_celsius else "°F"
 
         def disp_temp(val_c):
@@ -256,15 +263,12 @@ def open_window(parent, config=config, utils=utils):
         info_box.set_text("\n".join(lines))
         canvas.draw_idle()
 
-        # Footer „Heartbeat“
         try:
             mark_data_update()
         except Exception:
             pass
 
-        # Timer weiterlaufen lassen, unabhängig von Sensordaten
         win.after(3000, update)
 
-    # Start
     update()
     return win

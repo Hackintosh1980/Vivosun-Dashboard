@@ -7,6 +7,12 @@ header_gui.py – Header mit stabilem, bidirektionalem Offset-Sync
 import tkinter as tk
 import config
 import utils
+import os, sys
+
+# --- Pfad-Fix: stellt sicher, dass "widgets" & "main_gui" immer importierbar sind ---
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 # --- Globale Tk-Variablen-Holder für externen Sync (werden in build_header gesetzt) ---
 leaf_offset_var = None
@@ -251,10 +257,27 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
             if "scatter" in open_windows and open_windows["scatter"].winfo_exists():
                 open_windows["scatter"].lift()
                 return
-            import scattered_vpd_chart
+
+            import importlib.util
+            import os
+            import sys
+
+            # --- Absoluter Pfad zu scattered_vpd_chart.py ---
+            module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "widgets", "scattered_vpd_chart.py"))
+
+            if not os.path.exists(module_path):
+                print(f"❌ scattered_vpd_chart.py nicht gefunden unter: {module_path}")
+                return
+
+            # --- Modul manuell laden, egal von wo gestartet wird ---
+            spec = importlib.util.spec_from_file_location("scattered_vpd_chart", module_path)
+            scattered_vpd_chart = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(scattered_vpd_chart)
+
             win = scattered_vpd_chart.open_window(root, config, utils)
             open_windows["scatter"] = win
             win.protocol("WM_DELETE_WINDOW", lambda: (open_windows.pop("scatter", None), win.destroy()))
+            print("✅ scattered_vpd_chart erfolgreich geöffnet")
         except Exception as e:
             print(f"⚠️ Could not open scattered VPD chart: {e}")
 
