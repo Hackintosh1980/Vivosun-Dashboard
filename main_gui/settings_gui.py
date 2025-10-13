@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-settings_gui.py – 🌱 VIVOSUN Dashboard Settings (mit globaler Dezimalsteuerung)
+settings_gui.py – 🌱 VIVOSUN Dashboard Settings (mit globaler Dezimalsteuerung & Restart)
 """
 
 import tkinter as tk
 from tkinter import messagebox
-import os
+import os, sys
 from PIL import Image, ImageTk
 import config, utils
 
@@ -50,9 +50,9 @@ def open_settings_window(root=None, log=None):
     unit_celsius = cfg.get("unit_celsius", True)
     reconnect = cfg.get("RECONNECT_DELAY", config.RECONNECT_DELAY)
     poll_int = cfg.get("SENSOR_POLL_INTERVAL", getattr(config, "SENSOR_POLL_INTERVAL", 1))
-    temp_dec = cfg.get("TEMP_DECIMALS", config.TEMP_DECIMALS)
-    hum_dec = cfg.get("HUMID_DECIMALS", config.HUMID_DECIMALS)
-    vpd_dec = cfg.get("VPD_DECIMALS", config.VPD_DECIMALS)
+    temp_dec = cfg.get("TEMP_DECIMALS", getattr(config, "TEMP_DECIMALS", 1))
+    hum_dec = cfg.get("HUMID_DECIMALS", getattr(config, "HUMID_DECIMALS", 1))
+    vpd_dec = cfg.get("VPD_DECIMALS", getattr(config, "VPD_DECIMALS", 2))
 
     # --- Variablen ---
     var_unit = tk.BooleanVar(value=unit_celsius)
@@ -100,19 +100,18 @@ def open_settings_window(root=None, log=None):
 
     add_row(8, "Device ID:",
             tk.Entry(body, textvariable=var_dev, width=28,
-                     bg="#2c3e50", fg="#888", state="readonly"))
+                     bg="#2c3e50", fg=config.TEXT))
 
     # ---------- BUTTONS ----------
     footer = tk.Frame(win, bg=config.CARD)
     footer.pack(fill="x", side="bottom", pady=(10, 0))
 
     def save_settings():
-        """Speichert alle Änderungen (inkl. Dezimalpräzision)."""
+        """Speichert alle Änderungen (inkl. Dezimalpräzision & Device-ID)."""
         try:
             cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-            dev = cfg.get("device_id", "")
             new_cfg = {
-                "device_id": dev,
+                "device_id": var_dev.get(),
                 "unit_celsius": var_unit.get(),
                 "RECONNECT_DELAY": float(var_rec.get()),
                 "SENSOR_POLL_INTERVAL": float(var_poll.get()),
@@ -124,11 +123,12 @@ def open_settings_window(root=None, log=None):
             utils.safe_write_json(config.CONFIG_FILE, cfg)
             messagebox.showinfo("Gespeichert", "💾 Einstellungen gespeichert.")
             if log:
-                log("💾 config.json aktualisiert (mit Dezimalpräzision).")
+                log("💾 config.json aktualisiert (Settings gespeichert).")
         except Exception as e:
             messagebox.showerror("Fehler", f"❌ Fehler beim Speichern: {e}")
 
     def reset_device_id():
+        """Setzt Device-ID auf leer zurück."""
         try:
             cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
             cfg["device_id"] = ""
@@ -138,11 +138,22 @@ def open_settings_window(root=None, log=None):
         except Exception as e:
             messagebox.showerror("Fehler", f"⚠️ Device-ID Reset fehlgeschlagen: {e}")
 
+    def restart_program():
+        """Startet das Dashboard neu."""
+        try:
+            messagebox.showinfo("Restart", "🔄 Das Dashboard wird jetzt neu gestartet.")
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
+        except Exception as e:
+            messagebox.showerror("Fehler", f"⚠️ Neustart fehlgeschlagen: {e}")
+
     # Buttons
     tk.Button(footer, text="💾 Save", width=12, bg="#4CAF50", fg="white", relief="flat",
               font=("Segoe UI", 10, "bold"), command=save_settings).pack(side="left", padx=20, pady=15)
     tk.Button(footer, text="🧩 Reset Device ID", width=16, bg="#607D8B", fg="white", relief="flat",
               font=("Segoe UI", 10, "bold"), command=reset_device_id).pack(side="left", padx=10, pady=15)
+    tk.Button(footer, text="🔄 Restart Program", width=16, bg="#2196F3", fg="white", relief="flat",
+              font=("Segoe UI", 10, "bold"), command=restart_program).pack(side="left", padx=10, pady=15)
     tk.Button(footer, text="❌ Close", width=12, bg="#F44336", fg="white", relief="flat",
               font=("Segoe UI", 10, "bold"), command=win.destroy).pack(side="right", padx=20, pady=15)
 

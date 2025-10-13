@@ -208,17 +208,7 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         except Exception as e:
             print(f"⚠️ Fehler beim Chart-Reset: {e}")
 
-    def delete_config():
-        from tkinter import messagebox
-        if os.path.exists(config.CONFIG_FILE):
-            if messagebox.askyesno("Confirm", "Delete config.json?"):
-                try:
-                    os.remove(config.CONFIG_FILE)
-                    print("config.json deleted ✅")
-                except Exception as e:
-                    print(f"❌ Error deleting config.json: {e}")
-        else:
-            print("⚠️ config.json not found")
+
 
     def export_chart():
         from tkinter import filedialog
@@ -260,11 +250,6 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
             print(f"💾 CSV exportiert → {path}")
         except Exception as e:
             print(f"❌ CSV-Export fehlgeschlagen: {e}")
-
-    def restart_program():
-        print("🔄 Restarting program...")
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
 
 
 # --- SETTINGS BUTTON ---
@@ -321,12 +306,10 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
 
     # ---------- BUTTONS ----------
     tk.Button(row1, text="🧹 Reset Charts", command=reset_charts).pack(side="left", padx=6)
-    tk.Button(row1, text="🗑 Delete Config", command=delete_config).pack(side="left", padx=6)
     tk.Button(row1, text="💾 Export Chart", command=export_chart).pack(side="left", padx=6)
-    tk.Button(row1, text="⚙️ Settings", command=open_settings, bg="#1e8f4a", fg="white", font=("Segoe UI", 10, "bold")).pack(side="left", padx=6)
+    tk.Button(row1, text="⚙️ Settings", command=open_settings, bg="#1e8f4a", fg="white", font=("Segoe UI", 12, "bold")).pack(side="left", padx=6)
     tk.Button(row2, text="📈 VPD Scatter", command=open_scattered_vpd).pack(side="left", padx=6)
     tk.Button(row2, text="📊 GrowHub CSV", command=open_growhub_csv).pack(side="left", padx=6)
-    tk.Button(row2, text="🔄 Restart Program", command=restart_program).pack(side="left", padx=6)
 
     # Nach Aufbau einmal sicherstellen, dass GUI-Spinboxen exakt config zeigen
     sync_offsets_to_gui()
