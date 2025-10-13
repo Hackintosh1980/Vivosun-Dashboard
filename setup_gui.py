@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🌱 VIVOSUN Setup GUI – Cross-Platform Standalone Edition
+🌱 VIVOSUN Setup GUI – Live Theme Switch Edition
 """
 
 import os, re, sys, tkinter as tk
@@ -10,248 +10,299 @@ from PIL import Image, ImageTk
 import threading, queue, asyncio
 
 # -------------------------------------------------------------
-# Robust imports: funktioniert im Root & im Paketlauf
+# Imports & Themes
 # -------------------------------------------------------------
 try:
     import config, utils, icon_loader
     from main_gui import core_gui
+    from themes import theme_vivosun, theme_oceanic
 except ImportError:
     sys.path.append(os.path.dirname(__file__))
     import config, utils, icon_loader
     from main_gui import core_gui
+    from themes import theme_vivosun, theme_oceanic
 
 from vivosun_thermo import VivosunThermoScanner
 
 
+# -------------------------------------------------------------
+# Theme registry
+# -------------------------------------------------------------
+THEMES = {
+    "🌿 VIVOSUN Green": theme_vivosun,
+    "🌊 Oceanic Blue": theme_oceanic,
+}
+
+
+def load_theme_from_config():
+    try:
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+        t = cfg.get("theme")
+        if t in THEMES:
+            return t
+    except Exception:
+        pass
+    return "🌿 VIVOSUN Green"
+
+
+# -------------------------------------------------------------
+# Main GUI
+# -------------------------------------------------------------
 def run_setup():
+    theme_name = load_theme_from_config()
+    theme = THEMES[theme_name]
+
     root = tk.Tk()
     root.title("🌱 VIVOSUN Setup")
-    root.geometry("520x720")
-    root.minsize(480, 680)
-    root.configure(bg=config.BG)
+    root.geometry("560x780")
+    root.configure(bg=theme.BG_MAIN)
     icon_loader.set_app_icon(root)
 
-    # ---------- HEADER ----------
-    title = tk.Label(
-        root,
-        text="🌱 VIVOSUN Thermo Setup",
-        bg=config.BG,
-        fg=config.TEXT,
-        font=("Segoe UI", 20, "bold")
+    # ============ THEME SWITCHER ============
+    topbar = tk.Frame(root, bg=theme.CARD_BG)
+    topbar.pack(fill="x", pady=(8, 10))
+
+    tk.Label(topbar, text="🎨 Theme:", bg=theme.CARD_BG, fg=theme.TEXT_DIM, font=theme.FONT_LABEL)\
+        .pack(side="left", padx=(12, 6))
+
+    theme_var = tk.StringVar(value=theme_name)
+    theme_dropdown = ttk.Combobox(
+        topbar, textvariable=theme_var, values=list(THEMES.keys()), state="readonly", width=22
     )
-    title.pack(pady=(12, 5))
+    theme_dropdown.pack(side="left", padx=(0, 12))
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
-    logo_path = os.path.join(assets_dir, "setup.png")
-    if os.path.exists(logo_path):
-        img = Image.open(logo_path).resize((400, 130), Image.LANCZOS)
-        logo_img = ImageTk.PhotoImage(img)
-        logo_label = tk.Label(root, image=logo_img, bg=config.BG)
-        logo_label.image = logo_img
-        logo_label.pack(pady=6)
-
-    # ---------- TEXT BOX ----------
-    text = tk.Text(root, width=64, height=10, bg="#071116", fg="#bff5c9", font=("Consolas", 9))
-    text.pack(padx=8, pady=8)
-
-    # ---------- DEVICE LIST ----------
-    list_frame = tk.Frame(root, bg=config.CARD)
-    list_frame.pack(fill="x", padx=10, pady=(0, 8))
-
-    device_listbox = tk.Listbox(
-        list_frame,
-        bg=config.CARD,
-        fg=config.TEXT,
-        selectbackground="lime",
-        selectforeground="black",
-        font=("Segoe UI", 14, "bold"),
-        height=6
-    )
-    device_listbox.pack(fill="x", padx=5, pady=5)
-
-    devices = []
-    result_queue = queue.Queue()
-
-    def add_device_to_list(device_id, name):
-        device_listbox.insert(tk.END, f"⚪ {device_id}  |  {name}")
-
-    # ---------- SAVE ----------
-    def save_selected():
-        sel = device_listbox.curselection()
-        if not sel:
-            text.insert("end", "❌ Kein Gerät ausgewählt!\n")
-            return
-
-        selected_line = device_listbox.get(sel[0])
-        selected_id = selected_line.split("|")[0].replace("⚪", "").replace("🟢", "").strip()
-
-        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-        cfg["device_id"] = selected_id
-
-        use_celsius = messagebox.askyesno("Unit Selection", "Möchten Sie Celsius verwenden?\n\nYes = °C, No = °F")
-        cfg["unit_celsius"] = use_celsius
-
-        utils.safe_write_json(config.CONFIG_FILE, cfg)
-        text.insert("end", f"💾 Saved Device-ID {selected_id} and unit_celsius={use_celsius} in config.json\n")
-        text.see("end")
-
-        root.destroy()
-        core_gui.run_app(selected_id)
-
-    # ---------- SCAN ----------
-    scan_btn = None
-
-    def scan_devices():
-        def worker():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                scanner = VivosunThermoScanner()
-                found = loop.run_until_complete(scanner.discover(timeout=10))
-                if not found:
-                    result_queue.put("⚠️ Keine Geräte gefunden.")
-                else:
-                    out = []
-                    for d in found:
-                        name = (getattr(d, "name", "") or "").strip()
-                        addr = getattr(d, "address", None) or getattr(d, "identifier", None)
-                        if not name or not addr:
-                            continue
-                        if not any(x in name.lower() for x in ("vivosun", "thermobeacon")):
-                            continue
-                        device_id = getattr(d, "identifier", addr)
-                        out.append(f"{device_id}  |  {name}")
-                    result_queue.put("\n".join(out))
-            except Exception as e:
-                result_queue.put(f"❌ Fehler beim Scan: {e}")
-            finally:
-                loop.close()
-
-        text.insert("end", "🔍 Scanning for devices (10s)…\n")
-        text.see("end")
-        scan_btn.config(state="disabled")
-        start_pulse()
-        threading.Thread(target=worker, daemon=True).start()
-
-    def finish_scan(output):
-        nonlocal devices
-        stop_pulse()
-        scan_btn.config(state="normal")
-
-        text.insert("end", output + "\n")
-        text.insert("end", "✅ Scan abgeschlossen.\n")
-        text.see("end")
-
-        devices = []
-        device_listbox.delete(0, tk.END)
-
-        pattern = r"([0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}|(?:[0-9A-F]{2}:){5}[0-9A-F]{2})"
-        for line in output.splitlines():
-            match = re.search(pattern, line, re.IGNORECASE)
-            if match:
-                dev_id = match.group(1)
-                name = line.split("|")[-1].strip() if "|" in line else "Device"
-                devices.append(dev_id)
-                add_device_to_list(dev_id, name)
-
-        if not devices:
-            text.insert("end", "⚠️ Keine gültigen Device-IDs gefunden.\n")
-
-    def poll_queue():
-        try:
-            while True:
-                output = result_queue.get_nowait()
-                finish_scan(output)
-        except queue.Empty:
-            pass
-        root.after(500, poll_queue)
-
-    # ---------- BUTTONS ----------
-    button_frame = tk.Frame(root, bg=config.CARD)
-    button_frame.pack(pady=6)
-
-    def button_style(master, text, cmd):
-        return tk.Button(
-            master,
-            text=text,
-            command=cmd,
-            bg="lime",
-            fg="black",
-            font=("Segoe UI", 13, "bold"),
-            relief="ridge",
-            padx=12, pady=6
-        )
-
-    scan_btn = button_style(button_frame, "🔍 Scan Devices", scan_devices)
-    scan_btn.pack(side="left", padx=8)
-    button_style(button_frame, "💾 Save Selected", save_selected).pack(side="left", padx=8)
-
-    # ---------- PROGRESS (direkt unter Buttons, nicht im Footer) ----------
-    progress_frame = tk.Frame(root, bg=config.CARD)
-    progress_frame.pack(fill="x", pady=8)
-
+    # Combobox-Theme style
     style = ttk.Style()
     style.theme_use("default")
-    style.configure(
-        "Pulse.Horizontal.TProgressbar",
-        troughcolor=config.CARD,
-        background="#00ccff",
-        darkcolor="#004466",
-        lightcolor="#33ddff",
-        thickness=16
-    )
+    style.configure("TCombobox",
+                    fieldbackground=theme.CARD_BG,
+                    background=theme.CARD_BG,
+                    foreground=theme.TEXT,
+                    arrowcolor=theme.TEXT)
 
-    progress = ttk.Progressbar(
-        progress_frame,
-        orient="horizontal",
-        mode="determinate",
-        length=400,
-        style="Pulse.Horizontal.TProgressbar",
-        maximum=100
-    )
-    progress.pack(padx=12, pady=4)
+    # ============ BUILD FUNCTION ============
+    def build_gui(th):
+        """Rebuilds GUI layout dynamically when theme changes."""
+        for child in root.winfo_children():
+            if child not in (topbar,):
+                child.destroy()
 
-    pulse_running, pulse_value, pulse_dir = False, 0, 1
+        # --- Header ---
+        header = th.make_frame(root, bg=th.CARD_BG)
+        header.pack(fill="x", pady=(0, 10))
 
-    def start_pulse():
-        nonlocal pulse_running, pulse_value, pulse_dir
-        pulse_running = True
-        pulse_value = 0
-        pulse_dir = 1
-        animate_pulse()
+        tk.Label(
+            header,
+            text="🌱 VIVOSUN Thermo Setup",
+            bg=th.CARD_BG,
+            fg=th.LIME if hasattr(th, "LIME") else th.AQUA,
+            font=th.FONT_TITLE
+        ).pack(pady=(10, 4))
 
-    def stop_pulse():
-        nonlocal pulse_running
-        pulse_running = False
-        progress["value"] = 0
+        logo_path = os.path.join(os.path.dirname(__file__), "assets", "setup.png")
+        if os.path.exists(logo_path):
+            try:
+                img = Image.open(logo_path).resize((380, 120), Image.LANCZOS)
+                logo = ImageTk.PhotoImage(img)
+                logo_label = tk.Label(header, image=logo, bg=th.CARD_BG)
+                logo_label.image = logo
+                logo_label.pack(pady=(5, 5))
+            except Exception:
+                pass
 
-    def animate_pulse():
-        nonlocal pulse_value, pulse_dir
-        if not pulse_running:
-            return
-        pulse_value += pulse_dir * 5
-        if pulse_value >= 100:
-            pulse_value, pulse_dir = 100, -1
-        elif pulse_value <= 0:
-            pulse_value, pulse_dir = 0, 1
-        progress["value"] = pulse_value
-        root.after(50, animate_pulse)
+        # --- Text Output ---
+        text = tk.Text(
+            root, width=68, height=10,
+            bg=th.CARD_BG, fg=th.TEXT_DIM,
+            font=("Consolas", 9),
+            relief="flat",
+            insertbackground=th.BTN_PRIMARY
+        )
+        text.pack(padx=12, pady=10)
 
-    # ---------- FOOTER ----------
-    footer = tk.Frame(root, bg=config.CARD)
-    footer.pack(side="bottom", fill="x", pady=6)
+        # --- Device List ---
+        list_frame = th.make_frame(root, bg=th.CARD_BG)
+        list_frame.pack(fill="x", padx=12, pady=(0, 10))
 
-    footer_label = tk.Label(
-        footer,
-        text="📟 VIVOSUN Setup Tool v2.4 (Cross-Platform Compact)",
-        bg=config.CARD,
-        fg=config.TEXT,
-        font=("Segoe UI", 11)
-    )
-    footer_label.pack(side="right", padx=10)
+        device_listbox = tk.Listbox(
+            list_frame,
+            bg=th.CARD_BG,
+            fg=th.TEXT,
+            selectbackground=th.BTN_PRIMARY,
+            selectforeground="black",
+            font=("Segoe UI", 13, "bold"),
+            height=6,
+            relief="flat",
+            highlightbackground=th.BORDER,
+            highlightthickness=1
+        )
+        device_listbox.pack(fill="x", padx=8, pady=6)
 
-    poll_queue()
-    icon_loader.set_app_icon(root)
+        devices = []
+        result_queue = queue.Queue()
+
+        def add_device_to_list(device_id, name):
+            device_listbox.insert(tk.END, f"⚪ {device_id}  |  {name}")
+
+        # --- Device Scanning ---
+        def scan_devices():
+            def worker():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    scanner = VivosunThermoScanner()
+                    found = loop.run_until_complete(scanner.discover(timeout=10))
+                    if not found:
+                        result_queue.put("⚠️ Keine Geräte gefunden.")
+                    else:
+                        out = []
+                        for d in found:
+                            name = (getattr(d, "name", "") or "").strip()
+                            addr = getattr(d, "address", None) or getattr(d, "identifier", None)
+                            if not name or not addr:
+                                continue
+                            if not any(x in name.lower() for x in ("vivosun", "thermobeacon")):
+                                continue
+                            device_id = getattr(d, "identifier", addr)
+                            out.append(f"{device_id}  |  {name}")
+                        result_queue.put("\n".join(out))
+                except Exception as e:
+                    result_queue.put(f"❌ Scanfehler: {e}")
+                finally:
+                    loop.close()
+
+            text.insert("end", "🔍 Suche nach Geräten (10s)…\n")
+            text.see("end")
+            scan_btn.config(state="disabled")
+            start_pulse()
+            threading.Thread(target=worker, daemon=True).start()
+
+        def finish_scan(output):
+            stop_pulse()
+            scan_btn.config(state="normal")
+            text.insert("end", output + "\n✅ Scan abgeschlossen.\n")
+            text.see("end")
+
+            devices.clear()
+            device_listbox.delete(0, tk.END)
+            pattern = r"([0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}|(?:[0-9A-F]{2}:){5}[0-9A-F]{2})"
+            for line in output.splitlines():
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    dev_id = match.group(1)
+                    name = line.split("|")[-1].strip() if "|" in line else "Device"
+                    devices.append(dev_id)
+                    add_device_to_list(dev_id, name)
+            if not devices:
+                text.insert("end", "⚠️ Keine gültigen Device-IDs gefunden.\n")
+
+        def poll_queue():
+            try:
+                while True:
+                    output = result_queue.get_nowait()
+                    finish_scan(output)
+            except queue.Empty:
+                pass
+            root.after(500, poll_queue)
+
+        # --- Save Selection ---
+        def save_selected():
+            sel = device_listbox.curselection()
+            if not sel:
+                text.insert("end", "❌ Kein Gerät ausgewählt!\n")
+                text.see("end")
+                return
+
+            selected_line = device_listbox.get(sel[0])
+            selected_id = selected_line.split("|")[0].replace("⚪", "").strip()
+
+            cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+            cfg["device_id"] = selected_id
+            cfg["theme"] = theme_var.get()
+
+            use_celsius = messagebox.askyesno("Unit Selection", "Möchten Sie Celsius verwenden?\n\nYes = °C, No = °F")
+            cfg["unit_celsius"] = use_celsius
+
+            utils.safe_write_json(config.CONFIG_FILE, cfg)
+            text.insert("end", f"💾 Gespeichert: Device {selected_id} ({'°C' if use_celsius else '°F'})\n")
+            text.see("end")
+
+            root.destroy()
+            core_gui.run_app(selected_id)
+
+        # --- Buttons ---
+        button_frame = th.make_frame(root, bg=th.CARD_BG)
+        button_frame.pack(pady=6)
+
+        nonlocal scan_btn
+        scan_btn = th.make_button(button_frame, "🔍 Scan Devices", scan_devices, color=th.BTN_PRIMARY)
+        scan_btn.pack(side="left", padx=8)
+
+        th.make_button(button_frame, "💾 Save Selected", save_selected, color=th.BTN_SECONDARY).pack(side="left", padx=8)
+
+        # --- Progress Bar ---
+        progress_frame = th.make_frame(root, bg=th.CARD_BG)
+        progress_frame.pack(fill="x", pady=8)
+
+        style.configure("Pulse.Horizontal.TProgressbar",
+                        troughcolor=th.CARD_BG,
+                        background=th.BTN_PRIMARY,
+                        lightcolor=th.BTN_HOVER,
+                        darkcolor=th.BORDER,
+                        thickness=14)
+
+        progress = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate",
+                                   length=400, style="Pulse.Horizontal.TProgressbar", maximum=100)
+        progress.pack(padx=12, pady=4)
+
+        pulse_running, pulse_value, pulse_dir = False, 0, 1
+
+        def start_pulse():
+            nonlocal pulse_running, pulse_value, pulse_dir
+            pulse_running = True
+            pulse_value = 0
+            pulse_dir = 1
+            animate_pulse()
+
+        def stop_pulse():
+            nonlocal pulse_running
+            pulse_running = False
+            progress["value"] = 0
+
+        def animate_pulse():
+            nonlocal pulse_value, pulse_dir
+            if not pulse_running:
+                return
+            pulse_value += pulse_dir * 5
+            if pulse_value >= 100:
+                pulse_value, pulse_dir = 100, -1
+            elif pulse_value <= 0:
+                pulse_value, pulse_dir = 0, 1
+            progress["value"] = pulse_value
+            root.after(50, animate_pulse)
+
+        # --- Footer ---
+        footer = th.make_frame(root, bg=th.CARD_BG)
+        footer.pack(side="bottom", fill="x", pady=6)
+
+        tk.Label(footer, text=f"{theme_var.get()} • VIVOSUN Setup Tool v2.8",
+                 bg=th.CARD_BG, fg=th.TEXT_DIM, font=th.FONT_LABEL).pack(side="right", padx=10)
+
+        poll_queue()
+
+    # ============ THEME SWITCH HANDLER ============
+    def on_theme_change(event=None):
+        new_name = theme_var.get()
+        new_theme = THEMES[new_name]
+        utils.safe_write_json(config.CONFIG_FILE, {"theme": new_name})
+        build_gui(new_theme)
+
+    theme_dropdown.bind("<<ComboboxSelected>>", on_theme_change)
+
+    # ============ INITIAL BUILD ============
+    scan_btn = None
+    build_gui(theme)
+
     root.mainloop()
 
 
