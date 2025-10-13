@@ -12,9 +12,6 @@ import matplotlib.pyplot as plt
 import datetime, utils, config
 
 
-# -------------------------------------------------------------------
-# Kartenfarben & Titel
-# -------------------------------------------------------------------
 CARD_LAYOUT = [
     ("Internal Temp",  "t_main",  "#ff6633"),
     ("Humidity",       "h_main",  "#4ac1ff"),
@@ -24,8 +21,9 @@ CARD_LAYOUT = [
     ("External VPD",   "vpd_ext", "#ff4444"),
 ]
 
+
 def create_charts(root, config, log):
-    """Erzeugt 6-Karten Dashboard mit Auto-Switch Compact ↔ Full."""
+    """Erzeugt 6-Karten Dashboard mit Auto-Switch Compact ↔ Full + dynamischer Y-Skalierung"""
     log("📊 Chart-Grid initialisiert")
 
     frame = tk.Frame(root, bg=config.BG)
@@ -33,6 +31,9 @@ def create_charts(root, config, log):
 
     data_buffers = {k: [] for _, k, _ in CARD_LAYOUT}
     data_buffers["timestamps"] = []
+
+    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    use_celsius = cfg.get("unit_celsius", True)
 
     mode = {"compact": True}
     log("[AUTO] Initial mode → Compact")
@@ -50,35 +51,21 @@ def create_charts(root, config, log):
         fig, ax = plt.subplots(figsize=(3.8, 1.8))
         fig.patch.set_facecolor(config.CARD)
         ax.set_facecolor(config.CARD)
-        ax.tick_params(colors=config.TEXT, labelsize=8)
         for s in ax.spines.values():
             s.set_visible(False)
-        ax.grid(True, color="#222", linestyle=":", alpha=0.4)
-        ax.set_xticks([]); ax.set_yticks([])
+        ax.tick_params(colors="#666", labelsize=7)
+        ax.grid(True, color="#222", linestyle=":", alpha=0.35)
 
         canvas = FigureCanvasTkAgg(fig, master=card)
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=(4, 2))
 
-        # --- Titel & Wert optisch aufwerten ---
-        lbl_value = tk.Label(
-            card,
-            text="--",
-            fg=color,
-            bg=config.CARD,
-            font=("Segoe UI", 40, "bold")  # größerer Wert
-        )
+        lbl_value = tk.Label(card, text="--", fg=color, bg=config.CARD, font=("Segoe UI", 40, "bold"))
         lbl_value.place(relx=0.04, rely=0.10, anchor="w")
 
-        lbl_title = tk.Label(
-            card,
-            text=title.upper(),  # Großbuchstaben für mehr "Dashboard-Look"
-            fg="#AAA",
-            bg=config.CARD,
-            font=("Segoe UI Semibold", 18, "bold")
-        )
+        lbl_title = tk.Label(card, text=title.upper(), fg="#AAA", bg=config.CARD,
+                             font=("Segoe UI Semibold", 18, "bold"))
         lbl_title.place(relx=0.04, rely=0.25, anchor="w")
 
-        # Klick öffnet enlarged
         def make_open(key=key):
             def _open(event=None):
                 try:
@@ -95,7 +82,7 @@ def create_charts(root, config, log):
         labels.append(lbl_value)
 
     for i, (_, key) in enumerate(cards):
-        if key.startswith("t_ext") or key.startswith("h_ext") or key.startswith("vpd_ext"):
+        if key.startswith(("t_ext", "h_ext", "vpd_ext")):
             cards[i][0].grid_remove()
 
     def update():
@@ -109,18 +96,17 @@ def create_charts(root, config, log):
             data_buffers["timestamps"].append(ts)
 
             ext_ok = d.get("t_ext") not in (None, 0.0) or d.get("h_ext") not in (None, 0.0)
-
             if ext_ok and mode["compact"]:
                 log("[AUTO] switched → Full (external back)")
                 mode["compact"] = False
                 for i, (_, key) in enumerate(cards):
-                    if key.startswith("t_ext") or key.startswith("h_ext") or key.startswith("vpd_ext"):
+                    if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid()
             elif not ext_ok and not mode["compact"]:
                 log("[AUTO] switched → Compact (no external sensor)")
                 mode["compact"] = True
                 for i, (_, key) in enumerate(cards):
-                    if key.startswith("t_ext") or key.startswith("h_ext") or key.startswith("vpd_ext"):
+                    if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid_remove()
 
             for _, key, _ in CARD_LAYOUT:
@@ -137,66 +123,64 @@ def create_charts(root, config, log):
                             d["h_ext"] + config.humidity_offset[0]
                         )
                 data_buffers[key].append(val if val is not None else None)
-                data_buffers[key] = data_buffers[key][-60:]
+                data_buffers[key] = data_buffers[key][-200:]
+            data_buffers["timestamps"] = data_buffers["timestamps"][-200:]
 
-            data_buffers["timestamps"] = data_buffers["timestamps"][-60:]
-
-# --- Charts schöner zeichnen ---
             for i, (title, key, color) in enumerate(CARD_LAYOUT):
                 if mode["compact"] and key.startswith("t_ext"):
                     continue
+
                 val = data_buffers[key][-1] if data_buffers[key] else None
                 ax = axes[i]
                 lbl = labels[i]
-
                 ax.clear()
-                yvals = data_buffers[key]
-                xvals = data_buffers["timestamps"]
 
-                # Linie + Fülleffekt
-                ax.plot(
-                    xvals,
-                    yvals,
-                    color=color,
-                    linewidth=2.8,
-                    alpha=0.9
-                )
-                # dezenter Fülleffekt unter der Linie
-                if len(yvals) > 1:
-                    ax.fill_between(
-                        xvals,
-                        yvals,
-                        color=color,
-                        alpha=0.12  # halbtransparent
-                    )
+                x = data_buffers["timestamps"]
+                y = data_buffers[key]
 
-                # Grundgestaltung
+                if len(x) > 1 and any(v is not None for v in y):
+                    ax.plot(x, y, color=color, linewidth=2.0, alpha=0.9)
+                    ax.fill_between(x, y, min(y), color=color, alpha=0.15)
+
+                    y_min, y_max = min(y), max(y)
+                    if y_min == y_max:
+                        y_min -= 0.5
+                        y_max += 0.5
+                    else:
+                        pad = (y_max - y_min) * 0.2
+                        y_min -= pad
+                        y_max += pad
+                    ax.set_ylim(y_min, y_max)
+
                 ax.set_facecolor(config.CARD)
                 ax.grid(True, color="#333", linestyle=":", alpha=0.35)
+                ax.tick_params(colors="#666", labelsize=7)
+
+                if len(x) > 0:
+                    step = max(1, len(x) // 6)
+                    ax.set_xticks(x[::step])
+                    ax.set_xticklabels(
+                        [t.strftime("%H:%M") for t in x[::step]],
+                        fontsize=7, color="#777"
+                    )
+
                 for s in ax.spines.values():
                     s.set_visible(False)
 
-                # dezente Achsenbeschriftung
-                ax.tick_params(colors="#666", labelsize=7)
-                ax.yaxis.set_label_position("right")
-                ax.yaxis.tick_right()
-                if key.startswith("t_"):
-                    ax.set_ylabel("°C", color="#666", fontsize=8, labelpad=4)
-                elif key.startswith("h_"):
-                    ax.set_ylabel("%", color="#666", fontsize=8, labelpad=4)
-                elif key.startswith("vpd_"):
-                    ax.set_ylabel("kPa", color="#666", fontsize=8, labelpad=4)
+                ax.set_xlabel("", color="#777", fontsize=7)
+                ax.set_ylabel("", color="#777", fontsize=7)
 
-                # Achsenlimits automatisch, aber etwas gepuffert
-                if yvals and any(v is not None for v in yvals):
-                    valid = [v for v in yvals if v is not None]
-                    ymin, ymax = min(valid), max(valid)
-                    pad = (ymax - ymin) * 0.1 if ymax != ymin else 1
-                    ax.set_ylim(ymin - pad, ymax + pad)
-
-                # Wertlabel im GUI aktualisieren
-                unit = "°C" if key.startswith("t_") else "%" if key.startswith("h_") else " kPa"
-                lbl.config(text=f"{val:.1f}{unit}" if val is not None else "--")
+                if val is not None:
+                    if key.startswith("t_"):
+                        disp_val = val if use_celsius else utils.c_to_f(val)
+                        unit = "°C" if use_celsius else "°F"
+                        lbl.config(text=f"{disp_val:.1f}{unit}")
+                    elif key.startswith("h_"):
+                        lbl.config(text=f"{val:.1f}%")
+                    else:
+                        lbl.config(text=f"{val:.2f} kPa")
+                else:
+                    lbl.config(text="--")
 
                 figs[i].tight_layout(pad=0.4)
                 figs[i].canvas.draw_idle()

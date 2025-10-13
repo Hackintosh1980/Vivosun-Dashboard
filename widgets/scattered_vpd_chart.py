@@ -47,7 +47,7 @@ def open_window(parent, config=config, utils=utils):
     left_frame = tk.Frame(header, bg=config.CARD)
     left_frame.pack(side="left", padx=6)
 
-    # --- Logo laden (korrekter relativer Pfad aus /widgets heraus) ---
+    # --- Logo laden ---
     assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
     logo_path = os.path.join(assets_dir, "Logo.png")
     if os.path.exists(logo_path):
@@ -55,7 +55,7 @@ def open_window(parent, config=config, utils=utils):
             img = Image.open(logo_path).resize((90, 90), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
             logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
-            logo_label.image = logo_img  # Referenz halten (Tkinter-Bug)
+            logo_label.image = logo_img
             logo_label.pack(side="left", padx=(0, 12))
         except Exception as e:
             print(f"⚠️ Logo konnte nicht geladen werden: {e}")
@@ -68,7 +68,7 @@ def open_window(parent, config=config, utils=utils):
         text="🌱 VPD Comfort Chart",
         bg=config.CARD,
         fg=config.TEXT,
-        font=("Segoe UI", 22, "bold"),  # größer & klarer
+        font=("Segoe UI", 22, "bold"),
         anchor="w",
         justify="left"
     )
@@ -78,10 +78,13 @@ def open_window(parent, config=config, utils=utils):
     controls = tk.Frame(header, bg=config.CARD)
     controls.pack(side="right", pady=2)
 
-    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    # --- Pfadfix für Config-Datei ---
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    config_path = os.path.join(base_dir, "data", "config.json")
+    cfg = utils.safe_read_json(config_path) or {}
     unit_celsius = cfg.get("unit_celsius", True)
 
-    # Leaf Offset
+    # Leaf Offset (Anzeige in aktueller Einheit)
     tk.Label(
         controls,
         text=f"Leaf Offset ({'°C' if unit_celsius else '°F'}):",
@@ -89,19 +92,27 @@ def open_window(parent, config=config, utils=utils):
         fg=config.TEXT
     ).pack(side="left", padx=6)
 
-    start_val_leaf = config.leaf_offset_c[0] if unit_celsius else (config.leaf_offset_c[0] * 9.0 / 5.0)
-    leaf_offset_var = tk.DoubleVar(value=float(start_val_leaf))
+    # Startwert (intern °C → Anzeige ggf. °F)
+    start_val_leaf = float(config.leaf_offset_c[0])
+    if not unit_celsius:
+        start_val_leaf *= 9.0 / 5.0  # °C → °F (Offset)
+
+    leaf_offset_var = tk.DoubleVar(value=start_val_leaf)
 
     def on_leaf_offset_change(*_):
-        """Offset-Änderung mit sofortigem Header-Sync"""
+        """Offset-Änderung mit korrekter Einheit (Delta, kein +32!)."""
         try:
-            val = float(leaf_offset_var.get())
-            c_val = val if unit_celsius else (val * 5.0 / 9.0)
-            set_offsets_from_outside(leaf=c_val, hum=None, persist=True)
+            val_display = float(leaf_offset_var.get())
+            if unit_celsius:
+                val_c = val_display
+            else:
+                val_c = val_display * 5.0 / 9.0  # °F → °C
+            set_offsets_from_outside(leaf=val_c, hum=None, persist=True)
         except Exception:
             set_offsets_from_outside(leaf=0.0, hum=None, persist=True)
 
     leaf_offset_var.trace_add("write", on_leaf_offset_change)
+
     tk.Spinbox(
         controls,
         textvariable=leaf_offset_var,
@@ -141,7 +152,7 @@ def open_window(parent, config=config, utils=utils):
         justify="center"
     ).pack(side="left")
 
-    # Reset Offsets (triggert Traces)
+    # Reset Offsets
     def reset_offsets():
         leaf_offset_var.set(0.0)
         hum_offset_var.set(0.0)
@@ -187,7 +198,6 @@ def open_window(parent, config=config, utils=utils):
     ])
 
     cs = ax.contourf(T, H, VPD, levels=np.linspace(0, 4, 100), cmap=cmap, alpha=0.9)
-
     cbar = fig.colorbar(cs, ax=ax)
     cbar.set_label("VPD (kPa)", color=config.TEXT)
     cbar.ax.yaxis.set_tick_params(color=config.TEXT)
@@ -223,7 +233,7 @@ def open_window(parent, config=config, utils=utils):
     def update():
         d = utils.safe_read_json(config.DATA_FILE) or {}
 
-        leaf_off = float(config.leaf_offset_c[0])
+        leaf_off = float(config.leaf_offset_c[0])  # intern immer °C
         hum_off = float(config.humidity_offset[0])
 
         ti, hi = d.get("t_main"), d.get("h_main")

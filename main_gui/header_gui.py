@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-header_gui.py – Header mit stabilem, bidirektionalem Offset-Sync
+header_gui.py – Header mit stabilem, bidirektionalem Offset-Sync (Celsius/Fahrenheit-fix)
 """
 
 import tkinter as tk
@@ -14,46 +14,69 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-# --- Globale Tk-Variablen-Holder für externen Sync (werden in build_header gesetzt) ---
+# --- Globale Tk-Variablen für externen Sync ---
 leaf_offset_var = None
 hum_offset_var = None
 
+
+# ===============================================================
+#   🔧 Offset-Synchronisation (Config ↔ GUI)
+# ===============================================================
+
 def sync_offsets_to_gui():
-    """Setzt die Header-Spinboxen auf die aktuellen config-Werte (sicher, auch wenn GUI noch nicht gebaut)."""
+    """Aktualisiert die GUI-Spinboxen anhand der gespeicherten Werte in config."""
     try:
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+        use_celsius = cfg.get("unit_celsius", True)
+
+        # Leaf Offset: intern in °C, Anzeige in der gewählten Einheit
         if isinstance(leaf_offset_var, tk.DoubleVar):
-            leaf_offset_var.set(float(config.leaf_offset_c[0]))
+            val_c = float(config.leaf_offset_c[0])
+            display_val = val_c if use_celsius else val_c * 9.0 / 5.0  # Delta-Umrechnung ohne +32
+            leaf_offset_var.set(round(display_val, 2))
+
+        # Humidity Offset bleibt gleich
         if isinstance(hum_offset_var, tk.DoubleVar):
             hum_offset_var.set(float(config.humidity_offset[0]))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠️ sync_offsets_to_gui Fehler: {e}")
+
 
 def set_offsets_from_outside(leaf=None, hum=None, persist=True):
-    """
-    Externer Eintrittspunkt (z.B. aus scattered_vpd_chart):
-    - übernimmt neue Offsets in config (Leaf in °C, Hum in %),
-    - persistiert optional,
-    - spiegelt zurück in die Header-Spinboxen.
-    """
+    """Setzt Offsets in config (intern immer °C)."""
     try:
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+
         if leaf is not None:
             config.leaf_offset_c[0] = float(leaf)
         if hum is not None:
             config.humidity_offset[0] = float(hum)
 
         if persist:
-            try:
-                cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-                cfg["leaf_offset"] = config.leaf_offset_c[0]
-                cfg["humidity_offset"] = config.humidity_offset[0]
-                utils.safe_write_json(config.CONFIG_FILE, cfg)
-            except Exception:
-                pass
+            cfg["leaf_offset"] = config.leaf_offset_c[0]
+            cfg["humidity_offset"] = config.humidity_offset[0]
+            utils.safe_write_json(config.CONFIG_FILE, cfg)
 
         sync_offsets_to_gui()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"⚠️ set_offsets_from_outside Fehler: {e}")
 
+
+def update_leaf_offset(*_):
+    """Wenn User den Offset im GUI ändert → Umrechnung zurück in °C, dann speichern."""
+    try:
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+        use_celsius = cfg.get("unit_celsius", True)
+        val_display = float(leaf_offset_var.get())
+        val_c = val_display if use_celsius else val_display * 5.0 / 9.0  # Delta-Umrechnung
+        set_offsets_from_outside(leaf=val_c, hum=None, persist=True)
+    except Exception as e:
+        print(f"⚠️ update_leaf_offset Fehler: {e}")
+
+
+# ===============================================================
+#   🧩 GUI-Header-Aufbau
+# ===============================================================
 
 def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: None):
     """Erzeugt den GUI-Header."""
@@ -61,9 +84,7 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     header.pack(side="top", fill="x", padx=10, pady=8)
 
     # ---------- LOGO + TITEL ----------
-    import os
     from PIL import Image, ImageTk
-
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     logo_path = os.path.join(base_dir, "assets", "Logo.png")
 
@@ -105,19 +126,9 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         fg=config.TEXT
     ).pack(side="left", padx=6)
 
-    # Globale Tk-Variablen für externen Sync setzen
+    # Globale Tk-Variablen für externen Sync
     global leaf_offset_var, hum_offset_var
     leaf_offset_var = tk.DoubleVar(value=float(config.leaf_offset_c[0]))
-
-    def update_leaf_offset(*_):
-        try:
-            val = float(leaf_offset_var.get())
-            # In config IMMER in °C speichern
-            c_val = val if unit_celsius.get() else (val * 5.0 / 9.0)
-            set_offsets_from_outside(leaf=c_val, hum=None, persist=True)
-        except Exception:
-            set_offsets_from_outside(leaf=0.0, hum=None, persist=True)
-
     leaf_offset_var.trace_add("write", update_leaf_offset)
 
     tk.Spinbox(
@@ -159,7 +170,6 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
 
     # ---------- RESET BUTTON ----------
     def reset_offsets():
-        # Spinboxen setzen -> Trace setzt config & persistiert & spiegelt zurück
         leaf_offset_var.set(0.0)
         hum_offset_var.set(0.0)
         print("Offsets reset (Leaf=0.0°C, Humidity=0.0%)")
@@ -191,7 +201,6 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
 
     def delete_config():
         from tkinter import messagebox
-        import os
         if os.path.exists(config.CONFIG_FILE):
             if messagebox.askyesno("Confirm", "Delete config.json?"):
                 try:
@@ -204,7 +213,7 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
 
     def export_chart():
         from tkinter import filedialog
-        import csv, datetime, os
+        import csv, datetime
         try:
             export_dir = filedialog.askdirectory(title="Exportziel wählen", mustexist=True)
             if not export_dir:
@@ -244,7 +253,6 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
             print(f"❌ CSV-Export fehlgeschlagen: {e}")
 
     def restart_program():
-        import sys, os
         print("🔄 Restarting program...")
         python = sys.executable
         os.execl(python, python, *sys.argv)
@@ -259,17 +267,11 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
                 return
 
             import importlib.util
-            import os
-            import sys
-
-            # --- Absoluter Pfad zu scattered_vpd_chart.py ---
             module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "widgets", "scattered_vpd_chart.py"))
-
             if not os.path.exists(module_path):
                 print(f"❌ scattered_vpd_chart.py nicht gefunden unter: {module_path}")
                 return
 
-            # --- Modul manuell laden, egal von wo gestartet wird ---
             spec = importlib.util.spec_from_file_location("scattered_vpd_chart", module_path)
             scattered_vpd_chart = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(scattered_vpd_chart)
