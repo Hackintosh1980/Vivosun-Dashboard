@@ -94,26 +94,29 @@ def create_charts(root, config, log):
                 root.after(3000, update)
                 return
 
-            # 🔧 Wenn alle Werte None oder 0.0 sind → Dashboard zurücksetzen
-            if all(d.get(k) in (None, 0.0) for k in ["t_main", "h_main", "t_ext", "h_ext"]):
-                for key in data_buffers.keys():
-                    data_buffers[key].clear()
+            # Wenn alle Werte None sind → komplette Buffer leeren und Anzeige resetten
+            if all(v is None for v in d.values()):
+                for key in data_buffers:
+                    if isinstance(data_buffers[key], list):
+                        data_buffers[key].clear()
+                data_buffers["timestamps"].clear()
+
                 for lbl in labels:
                     lbl.config(text="--")
                 for ax in axes:
                     ax.clear()
                     ax.set_facecolor(config.CARD)
                     ax.grid(True, color="#333", linestyle=":", alpha=0.35)
-                    ax.tick_params(colors="#666", labelsize=7)
                 for fig in figs:
                     fig.canvas.draw_idle()
-                log("⚠️ Keine gültigen Sensordaten – Dashboard zurückgesetzt")
+
                 root.after(3000, update)
                 return
 
             ts = datetime.datetime.now()
             data_buffers["timestamps"].append(ts)
 
+            # --- Externer Sensor erkannt oder entfernt? ---
             ext_ok = d.get("t_ext") not in (None, 0.0) or d.get("h_ext") not in (None, 0.0)
             if ext_ok and mode["compact"]:
                 log("[AUTO] switched → Full (external back)")
@@ -121,6 +124,13 @@ def create_charts(root, config, log):
                 for i, (_, key) in enumerate(cards):
                     if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid()
+
+                # 🧩 Charts neu initialisieren (nur externe Buffers leeren)
+                for key in ["t_ext", "h_ext", "vpd_ext"]:
+                    if key in data_buffers and isinstance(data_buffers[key], list):
+                        data_buffers[key].clear()
+                log("🔁 Sensor wieder aktiv – Charts neu gestartet")
+
             elif not ext_ok and not mode["compact"]:
                 log("[AUTO] switched → Compact (no external sensor)")
                 mode["compact"] = True
@@ -128,11 +138,11 @@ def create_charts(root, config, log):
                     if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid_remove()
 
-            # --- Automatische Wiederaufnahme ---
+            # --- Datenpuffer aktualisieren ---
             for _, key, _ in CARD_LAYOUT:
                 val = d.get(key)
 
-                # Wenn DATA_FILE leer (None), Puffer nicht updaten
+                # Wenn keine gültigen Werte vorhanden → überspringen
                 if val is None and all(v is None for v in d.values()):
                     continue
 
@@ -149,14 +159,13 @@ def create_charts(root, config, log):
                             d["h_ext"] + config.humidity_offset[0]
                         )
 
-                # Nur hinzufügen, wenn gültig
                 if val is not None:
                     data_buffers[key].append(val)
                     data_buffers[key] = data_buffers[key][-200:]
 
             data_buffers["timestamps"] = data_buffers["timestamps"][-200:]
 
-            # --- Zeichnen ---
+            # --- Charts zeichnen ---
             for i, (title, key, color) in enumerate(CARD_LAYOUT):
                 if mode["compact"] and key.startswith("t_ext"):
                     continue
