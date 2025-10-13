@@ -1,92 +1,108 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-theme_sunset.py – 🔥 VIVOSUN Sunset Edition
-Warmer Darkmode mit orange-roten Akzenten und hellen Kontrastfarben.
+theme_sunset.py – 🌇 Sunset Orange Theme (vollständig, kompatibel)
 """
 
-# ---------------------------------------------------------
-# 🎨 Farben – Sunset Theme
-# ---------------------------------------------------------
-BG_MAIN   = "#1a0d0d"   # Dunkelrot-brauner Hintergrund
-CARD_BG   = "#2b1414"   # Panels / Frames
-BTN_PRIMARY   = "#ff9933"  # Hauptbuttons (Orange)
-BTN_SECONDARY = "#ffbb66"  # Zweitbuttons (Hellorange)
-BTN_RESET     = "#e53935"  # Warnung / Reset
-BTN_HOVER     = "#ffb84d"  # Hover-Farbe
-BORDER        = "#442020"  # Rahmenfarbe
-TEXT          = "#fff4e5"  # Haupttext (leicht beige)
-TEXT_DIM      = "#f5cba7"  # Sekundärer Text (hellorange)
-ACCENT        = "#ff6600"  # Icons, aktive Elemente
-GRID          = "#552a1a"  # Matplotlib-Grid
+import sys
+import tkinter as tk
 
-# ---------------------------------------------------------
-# 🖋 Fonts
-# ---------------------------------------------------------
+# -----------------------
+# Farben
+# -----------------------
+BG_MAIN    = "#1b0d09"
+CARD_BG    = "#2c120d"
+TEXT       = "#fff2e5"
+TEXT_DIM   = "#e0bba0"
+BORDER     = "#3a2015"
+GRID       = "#2a150c"
+
+SUNSET_ORANGE = "#ff9966"
+SUNSET_DARK   = "#cc7744"
+ORANGE        = "#ff7043"
+AMBER         = "#ffcc66"
+GOLD          = "#ffcc33"
+LIME          = "#ffd580"
+LIME_DARK     = "#e6b800"
+AQUA          = "#ffaa77"
+AQUA_DARK     = "#cc8855"
+RED           = "#ff4444"
+DISABLED      = "#553322"
+FOREST        = "#7a3a1a"
+
+# -----------------------
+# Buttons
+# -----------------------
+BTN_PRIMARY    = SUNSET_ORANGE
+BTN_SECONDARY  = GOLD
+BTN_HOVER      = SUNSET_DARK
+BTN_RESET      = ORANGE
+BTN_DANGER     = RED
+BTN_DISABLED   = DISABLED
+BTN_SAVE       = LIME
+BTN_WARNING    = ORANGE
+
+# -----------------------
+# Fonts
+# -----------------------
 FONT_TITLE = ("Segoe UI", 20, "bold")
 FONT_BTN   = ("Segoe UI", 11, "bold")
 FONT_LABEL = ("Segoe UI", 10, "bold")
+FONT_CODE  = ("Consolas", 9)
 
-# ---------------------------------------------------------
-# 🧩 Sammelobjekt (für leichten Zugriff)
-# ---------------------------------------------------------
-VIVOSUN_COLORS = {
-    "bg_main": BG_MAIN,
-    "card_bg": CARD_BG,
-    "btn_primary": BTN_PRIMARY,
-    "btn_secondary": BTN_SECONDARY,
-    "btn_reset": BTN_RESET,
-    "border": BORDER,
-    "text": TEXT,
-    "text_dim": TEXT_DIM,
-    "accent": ACCENT,
-    "grid": GRID,
-    "font_title": FONT_TITLE,
-    "font_btn": FONT_BTN,
-    "font_label": FONT_LABEL,
-}
-
-# ---------------------------------------------------------
-# 🔧 Tkinter Helper – standardisiert das Aussehen
-# ---------------------------------------------------------
-import tkinter as tk
-
-
-def make_button(master, text, cmd, color=BTN_PRIMARY, font=FONT_BTN):
-    """Erstellt einen thematisch passenden Button mit Hover-Effekt."""
-    btn = tk.Button(
-        master,
-        text=text,
-        command=cmd,
-        bg=color,
-        fg="black",
-        font=font,
-        activebackground=BTN_HOVER,
-        activeforeground="black",
-        relief="flat",
-        padx=10,
-        pady=6,
-        cursor="hand2",
-        highlightbackground=BORDER,
-        highlightthickness=2
+# -----------------------
+# Helpers
+# -----------------------
+def make_button(master, text, cmd=None, color=BTN_PRIMARY, font=FONT_BTN):
+    return tk.Button(
+        master, text=text, command=cmd,
+        bg=color, fg="black", font=font,
+        activebackground=BTN_HOVER, activeforeground="black",
+        relief="flat", padx=10, pady=6, cursor="hand2",
+        highlightbackground=BTN_HOVER, highlightthickness=1, bd=0
     )
 
-    def on_enter(e): btn.configure(bg=BTN_HOVER)
-    def on_leave(e): btn.configure(bg=color)
-    btn.bind("<Enter>", on_enter)
-    btn.bind("<Leave>", on_leave)
-    return btn
-
-
 def make_frame(master, **kwargs):
-    """Erzeugt ein Frame mit Sunset-Hintergrund."""
     bg = kwargs.pop("bg", CARD_BG)
     return tk.Frame(master, bg=bg, **kwargs)
 
-
 def apply_theme(widget, fg=TEXT, bg=BG_MAIN):
-    """Wendet Farben global an ein Tkinter-Widget an."""
     try:
         widget.configure(bg=bg, fg=fg)
     except Exception:
         pass
+
+def themed_spinbox(master, var, frm, to, inc=0.1, width=6):
+    return tk.Spinbox(master, textvariable=var, from_=frm, to=to, increment=inc,
+                      width=width, bg=CARD_BG, fg=TEXT, justify="center",
+                      relief="flat", highlightbackground=SUNSET_DARK, highlightthickness=1)
+
+def themed_entry(master, var, width=28):
+    return tk.Entry(master, textvariable=var, width=width, bg="#3a1f00", fg=TEXT, insertbackground=TEXT)
+
+# -----------------------
+# Compatibility aliases
+# -----------------------
+try:
+    _mod = sys.modules.get(__name__)
+    if not hasattr(_mod, "BTN_PRIMARY"): BTN_PRIMARY = locals().get("BTN_PRIMARY", SUNSET_ORANGE)
+    if not hasattr(_mod, "BTN_HOVER"): BTN_HOVER = locals().get("BTN_HOVER", SUNSET_DARK)
+    if not hasattr(_mod, "BTN_SECONDARY"): BTN_SECONDARY = locals().get("BTN_SECONDARY", GOLD)
+    if not hasattr(_mod, "FOREST"): FOREST = locals().get("FOREST", FOREST)
+    if not hasattr(_mod, "ORANGE"): ORANGE = locals().get("ORANGE", ORANGE)
+    if not hasattr(_mod, "AQUA"): AQUA = locals().get("AQUA", AQUA)
+    if not hasattr(_mod, "AQUA_DARK"): AQUA_DARK = locals().get("AQUA_DARK", AQUA_DARK)
+    if not hasattr(_mod, "LIME"): LIME = locals().get("LIME", LIME)
+    if not hasattr(_mod, "LIME_DARK"): LIME_DARK = locals().get("LIME_DARK", LIME_DARK)
+    if not hasattr(_mod, "TEXT"): TEXT = locals().get("TEXT", TEXT)
+except Exception:
+    BTN_PRIMARY = SUNSET_ORANGE
+    BTN_HOVER = SUNSET_DARK
+    BTN_SECONDARY = GOLD
+    FOREST = FOREST
+    ORANGE = ORANGE
+    AQUA = AQUA
+    AQUA_DARK = AQUA_DARK
+    LIME = LIME
+    LIME_DARK = LIME_DARK
+    TEXT = TEXT

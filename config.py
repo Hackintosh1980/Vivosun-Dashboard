@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 config.py – zentrale Konfiguration für das 🌱 VIVOSUN Thermo Dashboard
+mit integriertem Theme-Loader (VIVOSUN Green, Sunset, Blue etc.)
 """
 
 import os
 import sys
+import json
 from pathlib import Path
 
 # --- App Infos ---
@@ -24,6 +26,7 @@ def app_root() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
 
+
 BASE_DIR = app_root()
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -34,7 +37,7 @@ DATA_FILE    = DATA_DIR / "thermo_values.json"
 HISTORY_FILE = DATA_DIR / "thermo_history.csv"
 STATUS_FILE  = DATA_DIR / "status.json"
 
-# --- UI Farben ---
+# --- UI Farben (Fallback, falls Theme nicht geladen werden kann) ---
 BG     = "#0b1620"
 CARD   = "#0f1e2a"
 TEXT   = "#d6eaff"
@@ -43,7 +46,6 @@ ACCENT = "#8be9fd"
 # =====================================================
 #                     TIMING
 # =====================================================
-
 
 # --- Dashboard / GUI ---
 UI_POLL_INTERVAL = 1.0         # Sekunden für UI-Refresh
@@ -62,10 +64,6 @@ RECONNECT_DELAY = 3            # Sekunden zwischen Reconnect-Versuchen
 leaf_offset_c   = [0.0]        # Leaf-Temp-Offset (°C)
 humidity_offset = [0.0]        # Humidity-Offset (%)
 
-
-
-
-
 # =====================================================
 #                 ANZEIGE / FORMATIERUNG
 # =====================================================
@@ -73,3 +71,40 @@ humidity_offset = [0.0]        # Humidity-Offset (%)
 TEMP_DECIMALS = 1        # Nachkommastellen für Temperatur (°C/°F)
 HUMID_DECIMALS = 1       # Nachkommastellen für Luftfeuchte (%)
 VPD_DECIMALS  = 2        # Nachkommastellen für VPD (kPa)
+
+# =====================================================
+#                     THEME SYSTEM 🌈
+# =====================================================
+
+def load_active_theme():
+    """
+    Lädt das aktuell gesetzte Theme aus config.json.
+    Fällt automatisch auf das Standard-VIVOSUN-Theme zurück, wenn Fehler auftreten.
+    """
+    try:
+        if not CONFIG_FILE.exists():
+            raise FileNotFoundError("config.json fehlt, Theme nicht geladen")
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+
+        theme_name = cfg.get("theme", "🌿 VIVOSUN Green")
+
+        # --- Dynamische Theme-Zuweisung ---
+        if "Sunset" in theme_name:
+            from themes import theme_sunset as theme
+        elif "Blue" in theme_name or "Ocean" in theme_name:
+            from themes import theme_blue as theme
+        else:
+            from themes import theme_vivosun as theme
+
+        return theme
+
+    except Exception as e:
+        print(f"⚠️ Theme konnte nicht geladen werden: {e}")
+        from themes import theme_vivosun as theme
+        return theme
+
+
+# Globale THEME-Variable für alle Module verfügbar machen
+THEME = load_active_theme()

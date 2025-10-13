@@ -138,6 +138,29 @@ def create_charts(root, config, log):
                     if key.startswith(("t_ext", "h_ext", "vpd_ext")):
                         cards[i][0].grid_remove()
 
+            # --- 🧩 Hotplug-Fix: sofortige Werte bei neuem Gerät ---
+            try:
+                if "device_id" in d and d["device_id"]:
+                    # Falls Datenpuffer leer ist → initialisieren
+                    if not data_buffers["timestamps"]:
+                        ts = datetime.datetime.now()
+                        data_buffers["timestamps"].append(ts)
+                        for key in ("t_main", "h_main", "vpd_int", "t_ext", "h_ext", "vpd_ext"):
+                            if key in d and d[key] is not None:
+                                data_buffers[key].append(d[key])
+
+                    # Labels sofort aktualisieren
+                    decimals = {
+                        "t_main": config.TEMP_DECIMALS,
+                        "h_main": config.HUMID_DECIMALS,
+                        "vpd_int": config.VPD_DECIMALS,
+                    }
+                    for lbl, key in zip(labels, ("t_main", "h_main", "vpd_int")):
+                        if key in d and d[key] is not None:
+                            lbl.config(text=f"{d[key]:.{decimals[key]}f}")
+            except Exception as e:
+                print(f"⚠️ Hotplug-Update-Fehler: {e}")
+
             # --- Automatische Wiederaufnahme ---
             for _, key, _ in CARD_LAYOUT:
                 val = d.get(key)
