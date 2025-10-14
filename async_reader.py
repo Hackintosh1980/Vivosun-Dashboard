@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 async_reader.py – stabile Version mit getrennter Sensorerkennung
-Aktualisiert status.json alle 2 Sekunden mit:
+Aktualisiert status.json gemäß:
 {
   "connected": bool,
   "sensor_ok_main": bool,
   "sensor_ok_ext": bool,
   "sensor_ok": bool
 }
+und leert thermo_values.json bei Disconnect.
 """
 
 import asyncio
@@ -92,6 +93,7 @@ def sanitize(value):
 
 
 def _clear_data_file():
+    """Leert thermo_values.json (DATA_FILE)."""
     try:
         utils.safe_write_json(resource_path(config.DATA_FILE), {
             "timestamp": None,
@@ -106,19 +108,22 @@ def _clear_data_file():
 
 
 def _update_status(connected: bool, sensor_ok_main: bool, sensor_ok_ext: bool):
-    """Schreibt status.json bei jedem Zyklus neu."""
+    """Schreibt status.json bei jedem Zyklus neu; leert DATA_FILE bei Disconnect."""
     try:
         data = {
             "connected": connected,
             "sensor_ok_main": sensor_ok_main,
             "sensor_ok_ext": sensor_ok_ext,
-            # Rückwärtskompatibilität
+            # Rückwärtskompatibilität für ältere Module
             "sensor_ok": sensor_ok_main or sensor_ok_ext
         }
+
         utils.safe_write_json(STATUS_FILE, data)
         _status(connected)
+
         if not connected:
             _clear_data_file()
+
     except Exception as e:
         _log(f"⚠️ Fehler im Status-Update: {e}")
 
@@ -135,65 +140,67 @@ async def _read_loop(device_id, log_callback=None):
     )
 
     SCAN_INTERVAL = getattr(config, "SCAN_INTERVAL", 2)
+    RECONNECT_DELAY = getattr(config, "RECONNECT_DELAY", 10)
 
     while _running and not _stop_event.is_set():
         try:
             async with VivosunThermoClient(device_id) as client:
                 _log(f"✅ Connected to device {device_id}")
+                # Nach Connect sofort Status setzen (auch wenn Sensorwerte noch None sind)
                 _update_status(True, False, False)
 
                 while _running and not _stop_event.is_set():
                     try:
-                        # Sensorwerte abfragen
+                        # --- Sensorwerte lesen ---
                         t_main = sanitize(await client.current_temperature(PROBE_MAIN, UNIT_CELSIUS))
                         h_main = sanitize(await client.current_humidity(PROBE_MAIN))
-                        t_ext = sanitize(await client.current_temperature(PROBE_EXTERNAL, UNIT_CELSIUS))
-                        h_ext = sanitize(await client.current_humidity(PROBE_EXTERNAL))
+                        t_ext  = sanitize(await client.current_temperature(PROBE_EXTERNAL, UNIT_CELSIUS))
+                        h_ext  = sanitize(await client.current_humidity(PROBE_EXTERNAL))
 
-                        # Sensorstatus bestimmen
+                        # --- Sensorstatus bestimmen ---
                         sensor_ok_main = (t_main is not None and h_main is not None)
-                        sensor_ok_ext = (t_ext is not None and h_ext is not None)
+                        sensor_ok_ext  = (t_ext  is not None and h_ext  is not None)
 
-                        # Status schreiben (jede Runde)
+                        # --- Status schreiben (jede Runde) ---
                         _update_status(True, sensor_ok_main, sensor_ok_ext)
 
-                        # Snapshot-Datei aktualisieren
+                        # --- Snapshot schreiben (auch mit None-Werten, damit GUI korrekt reagiert) ---
                         payload = {
                             "timestamp": datetime.datetime.utcnow().isoformat(),
                             "t_main": t_main,
                             "h_main": h_main,
-                            "t_ext": t_ext,
-                            "h_ext": h_ext,
+                            "t_ext":  t_ext,
+                            "h_ext":  h_ext,
                         }
                         utils.safe_write_json(resource_path(config.DATA_FILE), payload)
 
-                        # CSV-Logging
+                        # --- CSV-Logging für internen Sensor (falls valide) ---
                         ts_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        t = payload["t_main"]
-                        h = payload["h_main"]
-                        vpd = utils.calc_vpd(t, h) if (t is not None and h is not None) else None
+                        vpd = utils.calc_vpd(t_main, h_main) if sensor_ok_main else None
                         utils.append_csv_row(
                             resource_path(config.HISTORY_FILE),
                             ["Timestamp", "Temperature", "Humidity", "VPD"],
-                            [ts_str, t, h, vpd],
+                            [ts_str, t_main, h_main, vpd],
                         )
 
                     except Exception as e:
-                        _log(f"⚠️ Device read error: {type(e).__name__}: {e}")
-                        _update_status(True, False, False)
+                        # Jede Lese-Exception betrachten wir als Verbindungsproblem → sauberer Disconnect
+                        _log(f"⚠️ Device read error – reconnecting: {type(e).__name__}: {e}")
+                        _update_status(False, False, False)  # leert auch DATA_FILE
+                        break  # verlässt die innere Schleife → Context schließt → Reconnect
 
                     await asyncio.sleep(SCAN_INTERVAL)
 
         except Exception as e:
+            # Verbindung konnte nicht aufgebaut/aufrechterhalten werden
             _log(f"❌ Bluetooth connection failed: {type(e).__name__}: {e}")
             _update_status(False, False, False)
 
         if _stop_event.is_set():
             break
 
-        delay = getattr(config, "RECONNECT_DELAY", 10)
-        _log(f"🔄 Reconnecting in {delay}s ...")
-        await asyncio.sleep(delay)
+        _log(f"🔄 Reconnecting in {RECONNECT_DELAY}s ...")
+        await asyncio.sleep(RECONNECT_DELAY)
 
 
 # -------------------------------------------------------------------
