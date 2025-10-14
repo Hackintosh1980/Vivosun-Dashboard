@@ -3,7 +3,7 @@
 """
 enlarged_charts.py – Vollbild-Chart-Fenster (kompatibel zu charts_gui)
 Zeigt den Verlauf eines Sensors (Temp, Hum, VPD) im Live-Update mit
-Zoom, Pause/Resume, Reset und echtem Footer-Sync.
+Zoom, Pause/Resume, Reset und echtem Footer-Sync (debounced).
 """
 
 import tkinter as tk
@@ -14,6 +14,8 @@ import matplotlib.patheffects as path_effects
 from PIL import Image, ImageTk
 import datetime
 import os
+import math
+
 from widgets.footer_widget import create_footer
 
 
@@ -23,19 +25,20 @@ from widgets.footer_widget import create_footer
 def open_window(parent, data_buffers, focus_key="t_main"):
     """Wrapper, um enlarged_charts aus charts_gui aufzurufen."""
     mapping = {
-        "t_main": ("Internal Temp",  "#ff6633", "°C"),
-        "h_main": ("Humidity",       "#4ac1ff", "%"),
-        "vpd_int": ("Internal VPD",  "#00ff99", "kPa"),
-        "t_ext": ("External Temp",   "#ff00aa", "°C"),
-        "h_ext": ("External Hum.",   "#ffaa00", "%"),
-        "vpd_ext": ("External VPD",  "#ff4444", "kPa"),
+        "t_main":  ("Internal Temp",  "#ff6633", "°C"),
+        "h_main":  ("Humidity",       "#4ac1ff", "%"),
+        "vpd_int": ("Internal VPD",   "#00ff99", "kPa"),
+        "t_ext":   ("External Temp",  "#ff00aa", "°C"),
+        "h_ext":   ("External Hum.",  "#ffaa00", "%"),
+        "vpd_ext": ("External VPD",   "#ff4444", "kPa"),
     }
-
     title, color, ylabel = mapping.get(focus_key, ("Unknown", "white", ""))
+
+    # Lokale Imports (halten Modul unabhängig)
     import config, utils
 
     time_buffer = data_buffers.get("timestamps", [])
-    unit_celsius = tk.BooleanVar(value=True)
+    unit_celsius = tk.BooleanVar(value=True)  # Anzeigeumschaltung möglich
 
     return _open_enlarged(parent, config, utils,
                           key=focus_key, title=title, color=color,
@@ -126,26 +129,26 @@ def _open_enlarged(parent, config, utils,
 
     # Zeitfenster-Auswahl
     SPANS_DAYS = {
-        "1m": 1 / 1440,
+        "1m":  1 / 1440,
         "15m": 15 / 1440,
         "30m": 30 / 1440,
-        "1h": 1 / 24,
-        "3h": 3 / 24,
+        "1h":  1 / 24,
+        "3h":  3 / 24,
         "12h": 12 / 24,
         "24h": 1,
-        "1w": 7,
+        "1w":  7,
     }
     span_choice = tk.StringVar(value="1h")
 
     # Achsenformatierung abhängig vom Zeitfenster
     def apply_locator(span_days: float):
-        if span_days <= 1 / 24:
+        if span_days <= 1 / 24:  # <= 1 Stunde
             ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        elif span_days <= 1:
+        elif span_days <= 1:     # <= 24 Stunden
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        else:
+        else:                    # Tage
             ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
         canvas.draw_idle()
@@ -162,6 +165,7 @@ def _open_enlarged(parent, config, utils,
         btn_pause.config(text="▶ Resume" if paused.get() else "⏸ Pause")
 
     def reset_view():
+        # Nur sichtbare X-Limits anpassen, Y wird automatisch skaliert
         if xs:
             ax.set_xlim(xs[0], xs[-1])
             ax.relim()
@@ -176,54 +180,102 @@ def _open_enlarged(parent, config, utils,
               bg="lime", fg="black", font=("Segoe UI", 10, "bold")).pack(side="left", padx=6)
 
     # ---------- FOOTER ----------
-    set_status, mark_data_update = create_footer(bottom, config)
+    # NEU: aktuelles Footer-Interface (3 Rückgaben)
+    set_status, mark_data_update, set_sensor_status = create_footer(bottom, config)
+
+    # ---------- STATUS-POLL (debounced wie Test-Window) ----------
+    def poll_status():
+        if not hasattr(poll_status, "_fail_counter"):
+            poll_status._fail_counter = 0
+            poll_status._last_connected = None
+
+        try:
+            status = utils.safe_read_json(config.STATUS_FILE) or {}
+            connected = bool(status.get("connected", False))
+            main_ok  = bool(status.get("sensor_ok_main", False))
+            ext_ok   = bool(status.get("sensor_ok_ext", False))
+
+            if connected:
+                poll_status._fail_counter = 0
+                smooth = True
+            else:
+                poll_status._fail_counter += 1
+                smooth = poll_status._fail_counter >= 3 and False or poll_status._last_connected
+
+            poll_status._last_connected = smooth
+            set_status(smooth)
+            set_sensor_status(main_ok, ext_ok)
+        except Exception:
+            # leise bleiben
+            pass
+
+        win.after(1500, poll_status)
+
+    poll_status()
 
     # ---------- UPDATE ----------
     _prev_span = [span_choice.get()]
+
+    def _c_to_f(c): return c * 9.0 / 5.0 + 32.0
 
     def update():
         if paused.get():
             win.after(1000, update)
             return
 
-        # time_buffer regelmäßig aktualisieren
+        # time_buffer regelmäßig aktualisieren (Referenz aus charts_gui)
         time_buffer[:] = data_buffers.get("timestamps", [])
+        xs_num = mdates.date2num(time_buffer)
         xs.clear()
-        xs.extend(mdates.date2num(time_buffer))
+        xs.extend(xs_num)
 
+        # Y-Werte erstellen (NaNs sauber behandeln)
         ys = []
         for v in data_buffers.get(key, []):
-            if v is None:
+            if v is None or (isinstance(v, float) and math.isnan(v)):
                 ys.append(float("nan"))
             elif key in ("t_main", "t_ext"):
-                ys.append(v if unit_celsius.get() else utils.c_to_f(v))
+                # Temp ggf. in °F darstellen
+                val = v if unit_celsius.get() else _c_to_f(v)
+                ys.append(val)
             else:
                 ys.append(v)
 
+        # Plot aktualisieren
         if xs and ys:
             line.set_data(xs, ys)
             span_days = SPANS_DAYS.get(span_choice.get(), 1 / 24)
             right, left = xs[-1], xs[-1] - span_days
             ax.set_xlim(left, right)
-            ax.relim()
-            ax.autoscale_view(scalex=False, scaley=True)
 
-            # Wenn Zeitfenster geändert → Locator neu anwenden
+            # Y-Skalierung auf sichtbare Daten
+            # (ignoriere NaNs)
+            y_valid = [y for y in ys if y is not None and not (isinstance(y, float) and math.isnan(y))]
+            if y_valid:
+                y_min, y_max = min(y_valid), max(y_valid)
+                pad = (y_max - y_min) * 0.2 if y_max != y_min else 0.5
+                ax.set_ylim(y_min - pad, y_max + pad)
+
+            # Zeitformatierung neu anwenden, wenn Fenster gewechselt
             if span_choice.get() != _prev_span[0]:
                 apply_locator(span_days)
                 _prev_span[0] = span_choice.get()
 
+            # Wertlabel
             latest = ys[-1]
-            if latest is not None and not (latest != latest):
+            if latest is not None and not (isinstance(latest, float) and math.isnan(latest)):
                 if key in ("t_main", "t_ext"):
                     unit = "°C" if unit_celsius.get() else "°F"
                     value_label.set_text(f"{latest:.1f} {unit}")
-                elif "h_" in key:
+                elif key.startswith("h_"):
                     value_label.set_text(f"{latest:.1f} %")
                 else:
                     value_label.set_text(f"{latest:.2f} kPa")
             else:
                 value_label.set_text("--")
+        else:
+            # Keine Daten → Achse stehen lassen, Label leeren
+            value_label.set_text("--")
 
         try:
             mark_data_update()
@@ -233,6 +285,7 @@ def _open_enlarged(parent, config, utils,
         canvas.draw_idle()
         win.after(1000, update)
 
+    # Initiale Formatierung & Start
     apply_locator(SPANS_DAYS[span_choice.get()])
     update()
     return win
