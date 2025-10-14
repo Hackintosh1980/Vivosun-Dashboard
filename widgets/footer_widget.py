@@ -16,49 +16,42 @@ def create_footer(parent, config):
     footer = tk.Frame(parent, bg=config.CARD)
     footer.pack(side="bottom", fill="x", padx=10, pady=6)
 
-    # ---------- STATUS-LINKS ----------
+    # ---------- STATUS LINKS ----------
     status_frame = tk.Frame(footer, bg=config.CARD)
     status_frame.pack(side="left")
 
-    # Verbindung-LED
     status_led = tk.Canvas(status_frame, width=22, height=22, bg=config.CARD, highlightthickness=0)
     status_led.pack(side="left", padx=8)
 
     status_text = tk.Label(
         status_frame,
-        text="[⚪] Initializing...",
+        text="Initializing...",
         bg=config.CARD,
         fg="gray",
         font=("Segoe UI", 11, "bold")
     )
     status_text.pack(side="left", padx=(0, 10))
 
-    # Sensorstatus-Anzeige
+    # ---------- SENSOR STATUS ----------
     sensor_text = tk.Label(
         status_frame,
-        text="🌡️ Internal: ⏳     🌡️ External: ⏳",
+        text="🌡️ Internal: —   🌡️ External: —",
         bg=config.CARD,
-        fg=config.TEXT,
-        font=("Segoe UI", 11, "bold")
+        fg="gray",
+        font=("Segoe UI", 11)
     )
-    sensor_text.pack(side="left")
+    sensor_text.pack(side="left", padx=(10, 10))
 
     last_update_time = [None]
-    disconnect_counter = [0]
-    _last_state = [None]
 
-    # ---------- Statusfunktionen ----------
+    # ---------- STATUS-LED ----------
     def set_status(connected=None):
-        """Aktualisiert Verbindungsstatus-LED und Text."""
-        if _last_state[0] == connected:
-            return
-        _last_state[0] = connected
-
+        """Setzt LED und Textzustand (geglättet, verhindert Flackern)."""
         status_led.delete("all")
 
         if connected is None:
             status_led.create_oval(2, 2, 20, 20, fill="gray", outline="")
-            status_text.config(text="[⚪] Initializing...", fg="gray")
+            status_text.config(text="Initializing...", fg="gray")
 
         elif connected:
             status_led.create_oval(2, 2, 20, 20, fill="lime green", outline="")
@@ -68,62 +61,67 @@ def create_footer(parent, config):
             status_led.create_oval(2, 2, 20, 20, fill="red", outline="")
             status_text.config(text="[🔴] Disconnected", fg="red")
 
-    def set_sensor_status(internal_ok=None, external_ok=None):
-        """Aktualisiert die Anzeige der internen / externen Sensoren."""
-        if internal_ok is None and external_ok is None:
-            sensor_text.config(text="🌡️ Internal: ⏳     🌡️ External: ⏳")
-            return
-
-        int_symbol = "✅" if internal_ok else "❌"
-        ext_symbol = "✅" if external_ok else "❌"
+    def set_sensor_status(main_ok=False, ext_ok=False):
+        """Aktualisiert die Sensorstatus-Anzeige."""
+        internal = "✅" if main_ok else "⚠️"
+        external = "✅" if ext_ok else "⚠️"
+        color = "lime green" if main_ok or ext_ok else "orange"
         sensor_text.config(
-            text=f"🌡️ Internal: {int_symbol}     🌡️ External: {ext_symbol}"
+            text=f"🌡️ Internal: {internal}     🌡️ External: {external}",
+            fg=color
         )
 
-    # ---------- Sofortstatus prüfen ----------
+    def mark_data_update():
+        """Speichert Zeitpunkt letzter Datenaktualisierung (Dashboard-Kompatibilität)."""
+        last_update_time[0] = datetime.datetime.now()
+
+    # ---------- POLLING (geglättet) ----------
+    def poll_status():
+        """Überwacht status.json, geglättet (3 Polls Toleranz)."""
+        if not hasattr(poll_status, "_fail_counter"):
+            poll_status._fail_counter = 0
+            poll_status._last_connected = None
+
+        try:
+            status = utils.safe_read_json(config.STATUS_FILE) or {}
+            connected = status.get("connected", False)
+            main_ok = status.get("sensor_ok_main", False)
+            ext_ok = status.get("sensor_ok_ext", False)
+
+            # --- Glättung (Debounce) ---
+            if connected:
+                poll_status._fail_counter = 0
+                if poll_status._last_connected is not True:
+                    set_status(True)
+                poll_status._last_connected = True
+            else:
+                poll_status._fail_counter += 1
+                if poll_status._fail_counter >= 3:
+                    if poll_status._last_connected is not False:
+                        set_status(False)
+                    poll_status._last_connected = False
+
+            # --- Sensorstatus direkt aktualisieren ---
+            set_sensor_status(main_ok, ext_ok)
+
+        except Exception as e:
+            print(f"⚠️ Footer Poll Error: {e}")
+
+        parent.after(2000, poll_status)
+
+    # ---------- INITIAL STATUS ----------
     try:
         current = utils.safe_read_json(config.STATUS_FILE) or {}
-        set_status(current.get("connected", None))
+        set_status(current.get("connected"))
         set_sensor_status(
-            current.get("sensor_ok_main"),
-            current.get("sensor_ok_ext")
+            current.get("sensor_ok_main", False),
+            current.get("sensor_ok_ext", False)
         )
         last_update_time[0] = datetime.datetime.now()
     except Exception:
         set_status(None)
-        set_sensor_status(None, None)
 
-    # ---------- Polling ----------
-    def poll_status():
-        now = datetime.datetime.now()
-        status = utils.safe_read_json(config.STATUS_FILE) or {}
-        status_connected = status.get("connected", False)
-
-        if last_update_time[0] is None:
-            last_update_time[0] = now
-
-        delta = (now - last_update_time[0]).total_seconds()
-        fresh = delta < 30
-
-        if status_connected and fresh:
-            disconnect_counter[0] = 0
-            set_status(True)
-        else:
-            disconnect_counter[0] += 1
-            if disconnect_counter[0] >= 3:
-                set_status(False)
-
-        set_sensor_status(
-            status.get("sensor_ok_main"),
-            status.get("sensor_ok_ext")
-        )
-
-        parent.after(2000, poll_status)
-
-    def mark_data_update():
-        last_update_time[0] = datetime.datetime.now()
-
-    parent.after(2000, poll_status)
+    poll_status()
 
     # ---------- INFO-LABEL ----------
     info = tk.Label(

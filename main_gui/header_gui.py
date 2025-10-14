@@ -272,12 +272,25 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         except Exception as e:
             print(f"⚠️ Fehler im GrowHub CSV Viewer: {e}")
 
+    def open_test_window():
+        try:
+            if "test" in open_windows and open_windows["test"].winfo_exists():
+                open_windows["test"].lift()
+                return
+            from widgets.test_window import open_window
+            win = open_window(root, config=config)
+            open_windows["test"] = win
+            win.protocol("WM_DELETE_WINDOW", lambda: (open_windows.pop("test", None), win.destroy()))
+        except Exception as e:
+            print(f"⚠️ Fehler beim Öffnen des Test Windows: {e}")
+
+
     # ---------- BUTTONS ----------
     THEME.make_button(row1, "🧹 Reset Charts", reset_charts, color=THEME.ORANGE).pack(side="left", padx=6)
     THEME.make_button(row1, "💾 Export Chart", export_chart, color=THEME.LIME).pack(side="left", padx=6)
     THEME.make_button(row1, "⚙️ Settings", open_settings, color=THEME.AQUA).pack(side="left", padx=6)
     THEME.make_button(row2, "📈 VPD Scatter", open_scattered_vpd, color=THEME.LIME_DARK).pack(side="left", padx=6)
     THEME.make_button(row2, "📊 GrowHub CSV", open_growhub_csv, color=THEME.FOREST).pack(side="left", padx=6)
-
+    THEME.make_button(row2, "🧪 Test Window", open_test_window, color=THEME.FOREST).pack(side="left", padx=6)
     sync_offsets_to_gui()
     return header

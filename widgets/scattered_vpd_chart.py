@@ -229,46 +229,110 @@ def open_window(parent, config=config, utils=utils):
         print(f"⚠️ Footer konnte nicht geladen werden: {e}")
         set_status = mark_data_update = lambda *a, **k: None
 
-    # ---------- UPDATE LOOP ----------
+# ---------- UPDATE LOOP ----------
     def update():
-        d = utils.safe_read_json(config.DATA_FILE) or {}
+        # --- Sanftes Status-Glätten (3 Polls Toleranz) ---
+        if not hasattr(update, "_disconnect_counter"):
+            update._disconnect_counter = 0
+            update._last_connected = True
+            update._hotstart_counter = 0
+            update._was_connected = True
 
-        leaf_off = float(config.leaf_offset_c[0])  # intern immer °C
+        status = utils.safe_read_json(config.STATUS_FILE) or {}
+        connected = status.get("connected", False)
+        sensor_ok_main = status.get("sensor_ok_main", False)
+        sensor_ok_ext = status.get("sensor_ok_ext", False)
+
+        # --- Glättung (verhindert Flackern) ---
+        if connected:
+            update._disconnect_counter = 0
+            update._last_connected = True
+        else:
+            update._disconnect_counter += 1
+            if update._disconnect_counter >= 3:
+                update._last_connected = False
+
+        connected = update._last_connected
+
+        # --- Hotstart: nach Reconnect 2 Polls abwarten, bevor Sensorwerte ausgewertet werden ---
+        if connected and not update._was_connected:
+            print("🔄 Reconnect erkannt – warte auf stabile Sensordaten …")
+            update._hotstart_counter = 2
+
+        update._was_connected = connected
+
+        if update._hotstart_counter > 0:
+            update._hotstart_counter -= 1
+            internal_dot.set_offsets(np.empty((0, 2)))
+            external_dot.set_offsets(np.empty((0, 2)))
+            info_box.set_text("[🟢] Connected (initializing...)\n🌡️ Internal: —   🌡️ External: —")
+            canvas.draw_idle()
+            win.after(3000, update)
+            return
+
+        # --- Daten prüfen ---
+        d = utils.safe_read_json(config.DATA_FILE) or {}
+        leaf_off = float(config.leaf_offset_c[0])
         hum_off = float(config.humidity_offset[0])
 
         ti, hi = d.get("t_main"), d.get("h_main")
         te, he = d.get("t_ext"), d.get("h_ext")
         vpd_int = vpd_ext = None
 
-        if ti is not None and hi is not None:
+        # --- Verbindung prüfen ---
+        if not connected:
+            # Alte Daten löschen, falls noch vorhanden
+            if any(d.get(k) for k in ("t_main", "h_main", "t_ext", "h_ext")):
+                utils.safe_write_json(config.DATA_FILE, {
+                    "timestamp": None,
+                    "t_main": None,
+                    "h_main": None,
+                    "t_ext": None,
+                    "h_ext": None,
+                })
+                print("🧹 Alte Werte beim Disconnect entfernt (Widget-Sync).")
+
+            internal_dot.set_offsets(np.empty((0, 2)))
+            external_dot.set_offsets(np.empty((0, 2)))
+            info_box.set_text("[🔴] Disconnected\n🌡️ Internal: ⚠️   🌡️ External: ⚠️")
+            canvas.draw_idle()
+            win.after(3000, update)
+            return
+
+        # --- Interner Sensor ---
+        if sensor_ok_main and ti is not None and hi is not None:
             ti_eff, hi_eff = ti + leaf_off, hi + hum_off
             internal_dot.set_offsets([[ti_eff, hi_eff]])
             vpd_int = utils.calc_vpd(ti_eff, hi_eff)
         else:
             internal_dot.set_offsets(np.empty((0, 2)))
 
-        if te is not None and he is not None:
+        # --- Externer Sensor ---
+        if sensor_ok_ext and te is not None and he is not None:
             te_eff, he_eff = te + leaf_off, he + hum_off
             external_dot.set_offsets([[te_eff, he_eff]])
             vpd_ext = utils.calc_vpd(te_eff, he_eff)
         else:
             external_dot.set_offsets(np.empty((0, 2)))
 
+        # --- Anzeige aufbauen ---
         unit = "°C" if unit_celsius else "°F"
 
         def disp_temp(val_c):
             return None if val_c is None else (val_c if unit_celsius else utils.c_to_f(val_c))
 
         lines = []
+        lines.append("[🟢] Connected")
+
         if vpd_int is not None:
-            lines.append(f"Internal: {disp_temp(ti):.1f}{unit} | {hi:.1f}% | VPD={vpd_int:.2f} kPa")
+            lines.append(f"🌡️ Internal: ✅ {disp_temp(ti):.1f}{unit} | {hi:.1f}% | VPD={vpd_int:.2f} kPa")
         else:
-            lines.append("Internal: — no data —")
+            lines.append("🌡️ Internal: ⚠️ — no data —")
 
         if vpd_ext is not None:
-            lines.append(f"External: {disp_temp(te):.1f}{unit} | {he:.1f}% | VPD={vpd_ext:.2f} kPa")
+            lines.append(f"🌡️ External: ✅ {disp_temp(te):.1f}{unit} | {he:.1f}% | VPD={vpd_ext:.2f} kPa")
         else:
-            lines.append("External: — sensor off —")
+            lines.append("🌡️ External: ⚠️ — sensor off —")
 
         info_box.set_text("\n".join(lines))
         canvas.draw_idle()
