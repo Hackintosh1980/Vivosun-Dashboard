@@ -107,42 +107,83 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     )
     title.pack(side="left", anchor="center")
 
-    # ---------- OFFSET-STEUERUNG ----------
-    controls = tk.Frame(header, bg=THEME.CARD_BG)
-    controls.pack(side="right", pady=6)
+# ---------- OFFSET-STEUERUNG (2-REIHIG, RECHTSBÜNDIG) ----------
+    offset_area = tk.Frame(header, bg=THEME.CARD_BG)
+    offset_area.pack(side="right", pady=6, padx=(10, 10), anchor="e")  # rechtsbündig
 
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     unit_celsius = tk.BooleanVar(value=cfg.get("unit_celsius", True))
 
+    vivosun_green = "#00cc66"
+    vivosun_dark = "#00994d"
+
+    def make_arrow_button(parent, text, command):
+        """Stylischer Pfeilbutton."""
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=vivosun_green,
+            activebackground=vivosun_dark,
+            fg="black",
+            font=("Segoe UI", 13, "bold"),
+            relief="flat",
+            width=3,
+            height=1,
+            cursor="hand2"
+        )
+        btn.pack(side="left", padx=2)
+        return btn
+
+    # ---------- LINKER BLOCK (zweireihig) ----------
+    control_block = tk.Frame(offset_area, bg=THEME.CARD_BG)
+    control_block.pack(side="right", anchor="e")  # rechtsbündig im gesamten Bereich
+
+    # --- REIHE 1: LEAF OFFSET ---
+    row1 = tk.Frame(control_block, bg=THEME.CARD_BG)
+    row1.pack(side="top", anchor="e", pady=(0, 4))
+
     tk.Label(
-        controls,
-        text=f"Leaf Temp Offset ({'°C' if unit_celsius.get() else '°F'}):",
-        bg=THEME.CARD_BG,
-        fg=THEME.TEXT
-    ).pack(side="left", padx=6)
-
-    global leaf_offset_var, hum_offset_var
-    leaf_offset_var = tk.DoubleVar(value=float(config.leaf_offset_c[0]))
-    leaf_offset_var.trace_add("write", update_leaf_offset)
-
-    tk.Spinbox(
-        controls,
-        textvariable=leaf_offset_var,
-        from_=-10.0, to=10.0, increment=0.1,
-        width=6,
+        row1,
+        text=f"🌿 Leaf Offset ({'°C' if unit_celsius.get() else '°F'}):",
         bg=THEME.CARD_BG,
         fg=THEME.TEXT,
-        justify="center",
-        highlightbackground=THEME.BORDER,
-        highlightthickness=1
-    ).pack(side="left")
+        font=("Segoe UI", 11, "bold")
+    ).pack(side="left", padx=(6, 4))
+
+    leaf_offset_var = tk.DoubleVar(value=float(config.leaf_offset_c[0]))
+
+    def update_leaf_offset(*_):
+        try:
+            set_offsets_from_outside(leaf=float(leaf_offset_var.get()), hum=None, persist=True)
+        except Exception:
+            set_offsets_from_outside(leaf=0.0, hum=None, persist=True)
+
+    leaf_offset_var.trace_add("write", update_leaf_offset)
 
     tk.Label(
-        controls,
-        text="Humidity Offset (%):",
+        row1,
+        textvariable=leaf_offset_var,
         bg=THEME.CARD_BG,
-        fg=THEME.TEXT
-    ).pack(side="left", padx=6)
+        fg="lime",
+        font=("Consolas", 14, "bold"),
+        width=5
+    ).pack(side="left", padx=4)
+
+    make_arrow_button(row1, "▲", lambda: leaf_offset_var.set(round(leaf_offset_var.get() + 0.1, 1)))
+    make_arrow_button(row1, "▼", lambda: leaf_offset_var.set(round(leaf_offset_var.get() - 0.1, 1)))
+
+    # --- REIHE 2: HUMIDITY OFFSET ---
+    row2 = tk.Frame(control_block, bg=THEME.CARD_BG)
+    row2.pack(side="top", anchor="e")
+
+    tk.Label(
+        row2,
+        text="💧 Humidity Offset (%):",
+        bg=THEME.CARD_BG,
+        fg=THEME.TEXT,
+        font=("Segoe UI", 11, "bold")
+    ).pack(side="left", padx=(6, 4))
 
     hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
 
@@ -154,27 +195,30 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
 
     hum_offset_var.trace_add("write", update_hum_offset)
 
-    tk.Spinbox(
-        controls,
+    tk.Label(
+        row2,
         textvariable=hum_offset_var,
-        from_=-20.0, to=20.0, increment=0.5,
-        width=6,
         bg=THEME.CARD_BG,
-        fg=THEME.TEXT,
-        justify="center",
-        highlightbackground=THEME.BORDER,
-        highlightthickness=1
-    ).pack(side="left")
+        fg="#00ffff",
+        font=("Consolas", 14, "bold"),
+        width=5
+    ).pack(side="left", padx=4)
 
-    # ---------- RESET BUTTON ----------
+    make_arrow_button(row2, "▲", lambda: hum_offset_var.set(round(hum_offset_var.get() + 1.0, 1)))
+    make_arrow_button(row2, "▼", lambda: hum_offset_var.set(round(hum_offset_var.get() - 1.0, 1)))
+
+    # ---------- RESET-BUTTON RECHTS DANEBEN ----------
     def reset_offsets():
         leaf_offset_var.set(0.0)
         hum_offset_var.set(0.0)
         print("Offsets reset (Leaf=0.0°C, Humidity=0.0%)")
 
     THEME.make_button(
-        controls, "↺ Reset Offsets", reset_offsets, color=THEME.ORANGE
-    ).pack(side="left", padx=6)
+        offset_area,
+        "↺ Reset Offsets",
+        reset_offsets,
+        color=THEME.LIME
+    ).pack(side="right", padx=(12, 4), anchor="e", pady=(10, 0))
 
     # ---------- BUTTON ROWS ----------
     button_frame = tk.Frame(header, bg=THEME.CARD_BG)
@@ -317,13 +361,13 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
 
       
     # ---------- BUTTONS ----------
-    THEME.make_button(row1, "🧹 Reset Charts", reset_charts, color=THEME.ORANGE).pack(side="left", padx=6)
+    THEME.make_button(row1, "🧹 Reset Charts", reset_charts, color=THEME.LIME).pack(side="left", padx=6)
     THEME.make_button(row1, "💾 Export Chart", export_chart, color=THEME.LIME).pack(side="left", padx=6)
-    THEME.make_button(row1, "⚙️ Settings", open_settings, color=THEME.AQUA).pack(side="left", padx=6)
-    THEME.make_button(row2, "📈 VPD Scatter old", open_scattered_vpd, color=THEME.LIME_DARK).pack(side="left", padx=6)
-    THEME.make_button(row2, "📊 GrowHub CSV", open_growhub_csv, color=THEME.FOREST).pack(side="left", padx=6)
-    THEME.make_button(row2, "🧪 Test Window", open_test_window, color=THEME.FOREST).pack(side="left", padx=6)
-    THEME.make_button(row2, "🧪 New Scatter", open_scattered_window, color=THEME.FOREST).pack(side="left", padx=6)
+    THEME.make_button(row1, "⚙️ Settings", open_settings, color=THEME.LIME).pack(side="left", padx=6)
+    THEME.make_button(row2, "📈 VPD Scatter old", open_scattered_vpd, color=THEME.LIME).pack(side="left", padx=6)
+    THEME.make_button(row2, "📊 GrowHub CSV", open_growhub_csv, color=THEME.LIME).pack(side="left", padx=6)
+    THEME.make_button(row2, "🧪 Test Window", open_test_window, color=THEME.LIME).pack(side="left", padx=6)
+    THEME.make_button(row2, "🧪 New Scatter", open_scattered_window, color=THEME.LIME).pack(side="left", padx=6)
 
     sync_offsets_to_gui()
     return header
