@@ -5,17 +5,20 @@ header_gui.py – Theme-Enabled Header mit stabilem Offset-Sync (Celsius/Fahrenh
 """
 
 import tkinter as tk
+import os, sys
 import config
 import utils
-import os, sys
 from PIL import Image, ImageTk
 
-THEME = config.THEME  # 🌈 Aktives Theme laden
-
-# --- Pfad-Fix ---
+# --- Pfad-Fix (muss vor Widget-Imports stehen!) ---
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+# Jetzt funktioniert dieser Import:
+from widgets.windows import scattered_window
+
+THEME = config.THEME  # 🌈 Aktives Theme laden
 
 leaf_offset_var = None
 hum_offset_var = None
@@ -265,10 +268,14 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
             if "csv" in open_windows and open_windows["csv"].winfo_exists():
                 open_windows["csv"].lift()
                 return
-            import growhub_csv_viewer
+
+            # 🔧 FIX: Import aus widgets statt Hauptordner
+            from widgets import growhub_csv_viewer
+
             win = growhub_csv_viewer.open_window(root, config=config)
             open_windows["csv"] = win
             win.protocol("WM_DELETE_WINDOW", lambda: (open_windows.pop("csv", None), win.destroy()))
+
         except Exception as e:
             print(f"⚠️ Fehler im GrowHub CSV Viewer: {e}")
 
@@ -284,13 +291,39 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         except Exception as e:
             print(f"⚠️ Fehler beim Öffnen des Test Windows: {e}")
 
+    def open_scattered_window():
+        """Öffnet das neue modulare Scattered-VPD-Fenster."""
+        try:
+            if "scattered_window" in open_windows and open_windows["scattered_window"].winfo_exists():
+                open_windows["scattered_window"].lift()
+                return
 
+            from widgets.windows import scattered_window
+
+            win = scattered_window.open_window(root, config=config)
+            open_windows["scattered_window"] = win
+
+            win.protocol(
+                "WM_DELETE_WINDOW",
+                lambda: (open_windows.pop("scattered_window", None), win.destroy())
+            )
+
+        except Exception as e:
+            print(f"⚠️ Fehler beim Öffnen des Scattered-Windows: {e}")
+
+
+
+
+
+      
     # ---------- BUTTONS ----------
     THEME.make_button(row1, "🧹 Reset Charts", reset_charts, color=THEME.ORANGE).pack(side="left", padx=6)
     THEME.make_button(row1, "💾 Export Chart", export_chart, color=THEME.LIME).pack(side="left", padx=6)
     THEME.make_button(row1, "⚙️ Settings", open_settings, color=THEME.AQUA).pack(side="left", padx=6)
-    THEME.make_button(row2, "📈 VPD Scatter", open_scattered_vpd, color=THEME.LIME_DARK).pack(side="left", padx=6)
+    THEME.make_button(row2, "📈 VPD Scatter old", open_scattered_vpd, color=THEME.LIME_DARK).pack(side="left", padx=6)
     THEME.make_button(row2, "📊 GrowHub CSV", open_growhub_csv, color=THEME.FOREST).pack(side="left", padx=6)
     THEME.make_button(row2, "🧪 Test Window", open_test_window, color=THEME.FOREST).pack(side="left", padx=6)
+    THEME.make_button(row2, "🧪 New Scatter", open_scattered_window, color=THEME.FOREST).pack(side="left", padx=6)
+
     sync_offsets_to_gui()
     return header

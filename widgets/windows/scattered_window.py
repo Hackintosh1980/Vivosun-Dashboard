@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-test_window.py – Testfenster mit ausgelagertem Chart-Modul
-Bindet Header, Footer, Status-Polling und das test_chart_widget ein.
+scattered_window.py – separates Modul-Fenster mit integriertem VPD-Scatter-Chart.
+Nutzt die modulare Struktur (Header, Body, Footer).
 """
 
 import tkinter as tk
 from PIL import Image, ImageTk
 import utils, config
 from widgets.footer_widget import create_footer
-from widgets.test_chart_widget import create_chart_widget
+from widgets.scattered_chart_widget import create_scattered_chart
 
 
 def open_window(parent, config=config, utils=utils):
+    """Öffnet das Scattered-VPD-Fenster."""
     win = tk.Toplevel(parent)
-    win.title("🧪 VIVOSUN Test Window (modular)")
+    win.title("🌡️ VIVOSUN – VPD Scattered Window")
     win.geometry("1000x700")
     win.configure(bg=config.BG)
 
@@ -22,27 +23,35 @@ def open_window(parent, config=config, utils=utils):
     header = tk.Frame(win, bg=config.CARD)
     header.pack(side="top", fill="x", padx=10, pady=6)
 
-    # Logo
+    # Logo laden
+    logo_path = "assets/Logo.png"
     try:
-        img = Image.open("assets/Logo.png").resize((60, 60))
+        img = Image.open(logo_path).resize((60, 60))
         logo = ImageTk.PhotoImage(img)
         lbl_logo = tk.Label(header, image=logo, bg=config.CARD)
         lbl_logo.image = logo
         lbl_logo.pack(side="left", padx=(5, 10))
     except Exception:
-        tk.Label(header, text="🌱", bg=config.CARD, fg=config.TEXT, font=("Segoe UI", 28)).pack(side="left")
+        lbl_logo = tk.Label(header, text="🌱", bg=config.CARD, fg=config.TEXT, font=("Segoe UI", 28))
+        lbl_logo.pack(side="left", padx=(5, 10))
 
     tk.Label(
         header,
-        text="VIVOSUN Modular Test Window",
+        text="VPD Scattered Live View",
         bg=config.CARD,
         fg=config.TEXT,
         font=("Segoe UI", 22, "bold")
-    ).pack(side="left", padx=(10, 20))
+    ).pack(side="left")
+
+    # ---------- BODY (Chartbereich) ----------
+    body = tk.Frame(win, bg=config.BG)
+    body.pack(fill="both", expand=True, padx=20, pady=10)
+
+    # Chartmodul einbinden
+    chart_frame, reset_chart, stop_chart = create_scattered_chart(body, config)
+    chart_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
     # ---------- RESET BUTTON ----------
-    # Der Reset kommt aus dem Chart-Modul
-    chart_frame, reset_chart, stop_chart = create_chart_widget(win)
     tk.Button(
         header,
         text="🔄 Reset Chart",
@@ -52,9 +61,6 @@ def open_window(parent, config=config, utils=utils):
         relief="flat",
         command=reset_chart
     ).pack(side="right", padx=10)
-
-    # ---------- CHART FRAME ----------
-    chart_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
     # ---------- FOOTER ----------
     set_status, mark_data_update, set_sensor_status = create_footer(win, config)
@@ -66,7 +72,11 @@ def open_window(parent, config=config, utils=utils):
 
     # ---------- STATUS POLLING ----------
     def poll_status():
-        """Aktualisiert Footer-Anzeige."""
+        """Liest status.json und aktualisiert Status & Sensoranzeige."""
+        if not hasattr(poll_status, "_fail_counter"):
+            poll_status._fail_counter = 0
+            poll_status._last_connected = None
+
         try:
             data = utils.safe_read_json(config.STATUS_FILE) or {}
 
@@ -74,11 +84,19 @@ def open_window(parent, config=config, utils=utils):
             main_ok = data.get("sensor_ok_main", False)
             ext_ok = data.get("sensor_ok_ext", False)
 
-            set_status(connected)
+            if connected:
+                poll_status._fail_counter = 0
+                poll_status._last_connected = True
+            else:
+                poll_status._fail_counter += 1
+                if poll_status._fail_counter >= 3:
+                    poll_status._last_connected = False
+
+            set_status(poll_status._last_connected)
             set_sensor_status(main_ok, ext_ok)
 
-        except Exception as e:
-            print(f"⚠️ Status Poll Error: {e}")
+        except Exception:
+            pass
 
         win.after(2000, poll_status)
 
@@ -87,11 +105,10 @@ def open_window(parent, config=config, utils=utils):
     # ---------- SHUTDOWN ----------
     def on_close():
         try:
-            stop_chart()  # Chart-Polling sauber beenden
+            stop_chart()
         except Exception:
             pass
         win.destroy()
 
     win.protocol("WM_DELETE_WINDOW", on_close)
-
     return win
