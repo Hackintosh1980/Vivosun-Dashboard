@@ -73,7 +73,7 @@ def create_charts(root, config, log):
 
         lbl_title = tk.Label(card, text=title.upper(), fg="#AAA", bg=config.CARD,
                              font=("Segoe UI Semibold", 18, "bold"))
-        lbl_title.place(relx=0.04, rely=0.25, anchor="w")
+        lbl_title.place(relx=0.04, rely=0.22, anchor="w")
 
         def make_open(key=key):
             def _open(event=None):

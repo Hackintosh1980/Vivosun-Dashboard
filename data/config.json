@@ -1,1 +1,1 @@
-{"theme": "\ud83c\udf3f VIVOSUN Green", "device_id": "18F528DA-0A79-1D73-E266-3018DD2F1E83", "unit_celsius": true, "leaf_offset": 0.0, "humidity_offset": 0.0, "RECONNECT_DELAY": 3.0, "SENSOR_POLL_INTERVAL": 1.0, "TEMP_DECIMALS": 2, "HUMID_DECIMALS": 2, "VPD_DECIMALS": 2}
+{"theme": "\ud83c\udf3f VIVOSUN Green", "device_id": "18F528DA-0A79-1D73-E266-3018DD2F1E83", "unit_celsius": true, "leaf_offset": 0.0, "humidity_offset": 0.0, "RECONNECT_DELAY": 3.0, "SENSOR_POLL_INTERVAL": 2.0, "TEMP_DECIMALS": 2, "HUMID_DECIMALS": 1, "VPD_DECIMALS": 2}

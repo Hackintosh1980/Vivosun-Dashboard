@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-async_reader.py – Hintergrund-Reader für VIVOSUN Thermo (THB-1S)
-Liest Werte über vivosun_thermo, schreibt Snapshots + CSV
-und hält status.json mit {"connected": bool, "sensor_ok": bool} aktuell.
+async_reader.py – stabile Version mit getrennter Sensorerkennung
+Aktualisiert status.json alle 2 Sekunden mit:
+{
+  "connected": bool,
+  "sensor_ok_main": bool,
+  "sensor_ok_ext": bool,
+  "sensor_ok": bool
+}
 """
 
 import asyncio
@@ -51,7 +56,7 @@ def _status(connected: bool):
 
 
 # -------------------------------------------------------------------
-# Helper: Safe path resolver (funktioniert auch in PyInstaller)
+# Helper
 # -------------------------------------------------------------------
 def resource_path(relative_path: str) -> str:
     if hasattr(sys, "_MEIPASS"):
@@ -73,23 +78,13 @@ STATUS_FILE = resource_path(getattr(config, "STATUS_FILE", "status.json"))
 # -------------------------------------------------------------------
 # Hilfsfunktionen
 # -------------------------------------------------------------------
-def _safe_log(callback, msg):
-    if not callable(callback):
-        return
-    try:
-        callback(msg)
-    except Exception:
-        pass
-
-
 def sanitize(value):
-    """Filtert unplausible Sensorwerte heraus (z. B. -0.06 °C / % = kein Signal)."""
+    """Filtert unplausible Sensorwerte (-0.07 … +0.07 = kein Signal)."""
     if value is None:
         return None
     try:
         v = float(value)
-        if -0.1 <= v <= 0.0:
-            _safe_log(_log_callback, f"⚠️ Sensor liefert negativen Nullwert ({v:.2f}) → ignoriert")
+        if -0.07 <= v <= 0.07:
             return None
         return v
     except Exception:
@@ -97,38 +92,35 @@ def sanitize(value):
 
 
 def _clear_data_file():
-    """Leert die Thermo-Werte-Datei bei Verbindungsverlust."""
     try:
-        empty_payload = {
+        utils.safe_write_json(resource_path(config.DATA_FILE), {
             "timestamp": None,
             "t_main": None,
             "h_main": None,
             "t_ext": None,
             "h_ext": None,
-        }
-        utils.safe_write_json(resource_path(config.DATA_FILE), empty_payload)
-        _safe_log(_log_callback, "🧹 DATA_FILE geleert (Verbindungsverlust).")
+        })
+        _log("🧹 DATA_FILE geleert (Verbindungsverlust).")
     except Exception as e:
-        _safe_log(_log_callback, f"⚠️ DATA_FILE konnte nicht geleert werden: {e}")
+        _log(f"⚠️ DATA_FILE konnte nicht geleert werden: {e}")
 
 
-def _update_status(connected: bool, sensor_ok: bool):
-    """Schreibt status.json nur, wenn sich der Zustand wirklich geändert hat.
-    Wenn keine Verbindung besteht, wird auch DATA_FILE geleert.
-    """
+def _update_status(connected: bool, sensor_ok_main: bool, sensor_ok_ext: bool):
+    """Schreibt status.json bei jedem Zyklus neu."""
     try:
-        old = utils.safe_read_json(STATUS_FILE) or {}
-        if old.get("connected") == connected and old.get("sensor_ok") == sensor_ok:
-            return
-
-        utils.safe_write_json(STATUS_FILE, {"connected": connected, "sensor_ok": sensor_ok})
+        data = {
+            "connected": connected,
+            "sensor_ok_main": sensor_ok_main,
+            "sensor_ok_ext": sensor_ok_ext,
+            # Rückwärtskompatibilität
+            "sensor_ok": sensor_ok_main or sensor_ok_ext
+        }
+        utils.safe_write_json(STATUS_FILE, data)
         _status(connected)
-
         if not connected:
             _clear_data_file()
-
     except Exception as e:
-        _safe_log(_log_callback, f"⚠️ Fehler im Status-Update: {e}")
+        _log(f"⚠️ Fehler im Status-Update: {e}")
 
 
 # -------------------------------------------------------------------
@@ -142,86 +134,64 @@ async def _read_loop(device_id, log_callback=None):
         UNIT_CELSIUS,
     )
 
+    SCAN_INTERVAL = getattr(config, "SCAN_INTERVAL", 2)
+
     while _running and not _stop_event.is_set():
         try:
             async with VivosunThermoClient(device_id) as client:
-                _safe_log(log_callback, f"✅ Connected to device {device_id}")
                 _log(f"✅ Connected to device {device_id}")
-                _update_status(True, True)
+                _update_status(True, False, False)
 
                 while _running and not _stop_event.is_set():
                     try:
+                        # Sensorwerte abfragen
                         t_main = sanitize(await client.current_temperature(PROBE_MAIN, UNIT_CELSIUS))
                         h_main = sanitize(await client.current_humidity(PROBE_MAIN))
                         t_ext = sanitize(await client.current_temperature(PROBE_EXTERNAL, UNIT_CELSIUS))
                         h_ext = sanitize(await client.current_humidity(PROBE_EXTERNAL))
 
-                        sensor_ok = not all(v is None for v in [t_main, h_main, t_ext, h_ext])
-                        if not sensor_ok:
-                            _safe_log(log_callback, "⚠️ Sensor not connected or invalid readings (0.0–0.2)")
-                            _log("⚠️ Sensor not connected or invalid readings (0.0–0.2)")
-                            _update_status(True, False)
-                            utils.safe_write_json(resource_path(config.DATA_FILE), {
-                                "timestamp": datetime.datetime.utcnow().isoformat(),
-                                "t_main": None,
-                                "h_main": None,
-                                "t_ext": None,
-                                "h_ext": None,
-                            })
-                            await asyncio.sleep(getattr(config, "SCAN_INTERVAL", 5))
-                            continue
+                        # Sensorstatus bestimmen
+                        sensor_ok_main = (t_main is not None and h_main is not None)
+                        sensor_ok_ext = (t_ext is not None and h_ext is not None)
 
-                        ts = datetime.datetime.utcnow().isoformat()
+                        # Status schreiben (jede Runde)
+                        _update_status(True, sensor_ok_main, sensor_ok_ext)
+
+                        # Snapshot-Datei aktualisieren
                         payload = {
-                            "timestamp": ts,
+                            "timestamp": datetime.datetime.utcnow().isoformat(),
                             "t_main": t_main,
                             "h_main": h_main,
                             "t_ext": t_ext,
                             "h_ext": h_ext,
                         }
+                        utils.safe_write_json(resource_path(config.DATA_FILE), payload)
 
-                        try:
-                            utils.safe_write_json(resource_path(config.DATA_FILE), payload)
-                        except Exception as e:
-                            _safe_log(log_callback, f"⚠️ Snapshot write failed: {e}")
-                            _log(f"⚠️ Snapshot write failed: {e}")
-
-                        try:
-                            ts_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            t = payload["t_main"]
-                            h = payload["h_main"]
-                            vpd = utils.calc_vpd(t, h) if (t is not None and h is not None) else None
-                            utils.append_csv_row(
-                                resource_path(config.HISTORY_FILE),
-                                ["Timestamp", "Temperature", "Humidity", "VPD"],
-                                [ts_str, t, h, vpd],
-                            )
-                        except Exception as e:
-                            _safe_log(log_callback, f"⚠️ Append CSV failed: {e}")
-                            _log(f"⚠️ Append CSV failed: {e}")
-
-                        _update_status(True, True)
+                        # CSV-Logging
+                        ts_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        t = payload["t_main"]
+                        h = payload["h_main"]
+                        vpd = utils.calc_vpd(t, h) if (t is not None and h is not None) else None
+                        utils.append_csv_row(
+                            resource_path(config.HISTORY_FILE),
+                            ["Timestamp", "Temperature", "Humidity", "VPD"],
+                            [ts_str, t, h, vpd],
+                        )
 
                     except Exception as e:
-                        msg = f"⚠️ Device read error – reconnecting: {type(e).__name__}: {e}"
-                        _safe_log(log_callback, msg)
-                        _log(msg)
-                        _update_status(False, False)
-                        break
+                        _log(f"⚠️ Device read error: {type(e).__name__}: {e}")
+                        _update_status(True, False, False)
 
-                    await asyncio.sleep(getattr(config, "SCAN_INTERVAL", 5))
+                    await asyncio.sleep(SCAN_INTERVAL)
 
         except Exception as e:
-            msg = f"❌ Bluetooth connection failed ({type(e).__name__}): {e}"
-            _safe_log(log_callback, msg)
-            _log(msg)
-            _update_status(False, False)
+            _log(f"❌ Bluetooth connection failed: {type(e).__name__}: {e}")
+            _update_status(False, False, False)
 
         if _stop_event.is_set():
             break
 
-        delay = getattr(config, "RECONNECT_DELAY", 15)
-        _safe_log(log_callback, f"🔄 Reconnecting in {delay}s ...")
+        delay = getattr(config, "RECONNECT_DELAY", 10)
         _log(f"🔄 Reconnecting in {delay}s ...")
         await asyncio.sleep(delay)
 
@@ -248,8 +218,8 @@ def start_reader_thread(device_id, log_callback=None):
             traceback.print_exc()
         finally:
             loop.close()
-            _update_status(False, False)
-            _safe_log(log_callback, "🧹 Reader-Thread beendet.")
+            _update_status(False, False, False)
+            _log("🧹 Reader-Thread beendet.")
             _running = False
 
     _thread = threading.Thread(target=runner, daemon=True)
@@ -260,11 +230,11 @@ def stop_reader():
     global _running
     if not _running:
         return
-    _safe_log(print, "[🧹] Stoppe Async-Reader …")
+    _log("[🧹] Stoppe Async-Reader …")
     _stop_event.set()
     _running = False
     try:
-        _update_status(False, False)
+        _update_status(False, False, False)
     except Exception:
         pass
 

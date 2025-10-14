@@ -42,9 +42,10 @@ def run_app(device_id=None):
     log("🌱 Dashboard gestartet – Logsystem aktiv")
 
     # ---------- FOOTER ----------
-    set_status, mark_data_update = create_footer(main_frame, config)
+    set_status, mark_data_update, set_sensor_status = create_footer(main_frame, config)
     try:
         set_status(False)
+        set_sensor_status(False, False)
     except Exception:
         pass
 

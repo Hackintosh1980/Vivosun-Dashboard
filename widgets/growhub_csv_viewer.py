@@ -81,34 +81,40 @@ def open_window(parent, config=None):
 
     win.protocol("WM_DELETE_WINDOW", on_close)
 
-    # ---------- Header ----------
-    header = tk.Frame(win, bg=card_color)
-    header.pack(side="top", fill="x", padx=10, pady=6)
+    # ---------- HEADER ----------
+    header = tk.Frame(win, bg=config.CARD)
+    header.pack(side="top", fill="x", padx=10, pady=(10, 6))
 
-    left_frame = tk.Frame(header, bg=card_color)
+    left_frame = tk.Frame(header, bg=config.CARD)
     left_frame.pack(side="left", padx=6)
 
-    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+    # --- Logo laden ---
+    assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
     logo_path = os.path.join(assets_dir, "Logo.png")
     if os.path.exists(logo_path):
         try:
-            img = Image.open(logo_path).resize((100, 100), Image.LANCZOS)
+            img = Image.open(logo_path).resize((90, 90), Image.LANCZOS)
             logo_img = ImageTk.PhotoImage(img)
-            logo_label = tk.Label(left_frame, image=logo_img, bg=card_color)
+            logo_label = tk.Label(left_frame, image=logo_img, bg=config.CARD)
             logo_label.image = logo_img
-            logo_label.pack(side="left", padx=(0, 10))
+            logo_label.pack(side="left", padx=(0, 12))
         except Exception as e:
             print(f"⚠️ Logo konnte nicht geladen werden: {e}")
+    else:
+        print(f"⚠️ Logo nicht gefunden unter: {logo_path}")
 
+    # --- Titel rechts neben Logo ---
     title = tk.Label(
         left_frame,
-        text="🌱 GrowHub CSV Viewer",
-        bg=card_color,
-        fg=text_color,
-        font=("Segoe UI", 18, "bold"),
-        anchor="w"
+        text="🌱 Grohub E42a CSV Import",
+        bg=config.CARD,
+        fg=config.TEXT,
+        font=("Segoe UI", 22, "bold"),
+        anchor="w",
+        justify="left"
     )
     title.pack(side="left", anchor="center")
+
 
     # ---------- Controls ----------
     controls = tk.Frame(header, bg=card_color)
