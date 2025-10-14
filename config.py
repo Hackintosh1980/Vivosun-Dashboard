@@ -93,8 +93,8 @@ def load_active_theme():
         # --- Dynamische Theme-Zuweisung ---
         if "Sunset" in theme_name:
             from themes import theme_sunset as theme
-        elif "Blue" in theme_name or "Ocean" in theme_name:
-            from themes import theme_blue as theme
+        elif "Blue" in theme_name or "Oceanic" in theme_name:
+            from themes import theme_oceanic as theme
         else:
             from themes import theme_vivosun as theme
 
