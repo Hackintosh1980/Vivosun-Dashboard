@@ -54,76 +54,7 @@ def create_scattered_chart(parent, config=config):
     leaf_off_c = float(getattr(config, "leaf_offset_c", [0.0])[0])  # intern immer °C
     hum_off = float(getattr(config, "humidity_offset", [0.0])[0])
 
-    # ---------- CONTROL-LEISTE (Spins) ----------
-    controls = tk.Frame(frame, bg=config.CARD)
-    controls.pack(side="top", fill="x", padx=8, pady=(8, 4))
 
-    # Leaf Offset (Anzeige in akt. Einheit, intern °C-Delta)
-    tk.Label(
-        controls,
-        text=f"Leaf Offset ({'°C' if unit_celsius else '°F'}):",
-        bg=config.CARD, fg=config.TEXT
-    ).pack(side="left", padx=(8, 6))
-
-    start_leaf_display = leaf_off_c if unit_celsius else (leaf_off_c * 9.0 / 5.0)
-    leaf_offset_var = tk.DoubleVar(value=start_leaf_display)
-
-    def on_leaf_offset_change(*_):
-        nonlocal leaf_off_c
-        try:
-            val_display = float(leaf_offset_var.get())
-            leaf_off_c = val_display if unit_celsius else _f_to_c(val_display)  # zurück in °C
-            set_offsets_from_outside(leaf=leaf_off_c, hum=None, persist=True)
-        except Exception:
-            pass
-
-    leaf_offset_var.trace_add("write", on_leaf_offset_change)
-
-    tk.Spinbox(
-        controls, textvariable=leaf_offset_var,
-        from_=-10.0 if unit_celsius else -18.0,
-        to=10.0 if unit_celsius else 18.0,
-        increment=0.1 if unit_celsius else 0.2,
-        width=6, bg=config.CARD, fg=config.TEXT, justify="center"
-    ).pack(side="left")
-
-    # Humidity Offset
-    tk.Label(
-        controls, text="Humidity Offset (%):", bg=config.CARD, fg=config.TEXT
-    ).pack(side="left", padx=(12, 6))
-
-    hum_offset_var = tk.DoubleVar(value=hum_off)
-
-    def on_hum_offset_change(*_):
-        nonlocal hum_off
-        try:
-            hum_off = float(hum_offset_var.get())
-            set_offsets_from_outside(leaf=None, hum=hum_off, persist=True)
-        except Exception:
-            pass
-
-    hum_offset_var.trace_add("write", on_hum_offset_change)
-
-    tk.Spinbox(
-        controls, textvariable=hum_offset_var,
-        from_=-50.0, to=50.0, increment=1.0,
-        width=6, bg=config.CARD, fg=config.TEXT, justify="center"
-    ).pack(side="left")
-
-    def reset_offsets():
-        leaf_offset_var.set(0.0)
-        hum_offset_var.set(0.0)
-
-    tk.Button(
-        controls, text="↺ Reset Offsets", command=reset_offsets,
-        bg="orange", fg="black", font=("Segoe UI", 10, "bold")
-    ).pack(side="left", padx=10)
-
-    # Nach Aufbau: aktuelle Werte synchronisieren (falls Header aktiv)
-    try:
-        sync_offsets_to_gui()
-    except Exception:
-        pass
 
     # --------- Figure / Axes ----------
     fig, ax = plt.subplots(figsize=(9, 7), facecolor=config.BG)

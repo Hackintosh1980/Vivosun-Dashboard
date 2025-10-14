@@ -55,11 +55,11 @@ def create_footer(parent, config):
 
         elif connected:
             status_led.create_oval(2, 2, 20, 20, fill="lime green", outline="")
-            status_text.config(text="[🟢] Connected", fg="lime green")
+            status_text.config(text="Connected", fg="lime green")
 
         else:
             status_led.create_oval(2, 2, 20, 20, fill="red", outline="")
-            status_text.config(text="[🔴] Disconnected", fg="red")
+            status_text.config(text="Disconnected", fg="red")
 
     def set_sensor_status(main_ok=False, ext_ok=False):
         """Aktualisiert die Sensorstatus-Anzeige."""

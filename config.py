@@ -111,3 +111,14 @@ THEME = load_active_theme()
 
 
 DEBUG_LOGGING = True  # Kann über Settings toggled werden
+
+# --- THEME COLORS (fallbacks for modules) ---
+try:
+    LIME = THEME.LIME
+except Exception:
+    LIME = "#00FF66"
+
+try:
+    ORANGE = THEME.ORANGE
+except Exception:
+    ORANGE = "#FF8800"
