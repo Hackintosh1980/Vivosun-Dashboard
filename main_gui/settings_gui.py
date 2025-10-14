@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-settings_gui.py – 🌱 VIVOSUN Dashboard Settings (mit Theme-Picker, globaler Dezimalsteuerung & Restart)
+settings_gui.py – 🌱 VIVOSUN Dashboard Settings (mit Theme-Picker, globaler Dezimalsteuerung & Restart + Debug Logging)
 """
 
 import tkinter as tk
@@ -34,7 +34,7 @@ def open_settings_window(root=None, log=None):
 
     win = tk.Toplevel(root)
     win.title("🌱 VIVOSUN Dashboard – Settings")
-    win.geometry("780x640")
+    win.geometry("780x900")
     win.configure(bg=theme.BG_MAIN)
 
     # ---------- HEADER ----------
@@ -90,6 +90,7 @@ def open_settings_window(root=None, log=None):
     temp_dec = cfg.get("TEMP_DECIMALS", getattr(config, "TEMP_DECIMALS", 1))
     hum_dec = cfg.get("HUMID_DECIMALS", getattr(config, "HUMID_DECIMALS", 1))
     vpd_dec = cfg.get("VPD_DECIMALS", getattr(config, "VPD_DECIMALS", 2))
+    debug_enabled = cfg.get("debug_logging", True)
 
     var_unit = tk.BooleanVar(value=unit_celsius)
     var_rec = tk.DoubleVar(value=reconnect)
@@ -98,6 +99,7 @@ def open_settings_window(root=None, log=None):
     var_tdec = tk.IntVar(value=temp_dec)
     var_hdec = tk.IntVar(value=hum_dec)
     var_vdec = tk.IntVar(value=vpd_dec)
+    debug_var = tk.BooleanVar(value=debug_enabled)
 
     # ---------- GRID LAYOUT ----------
     body.columnconfigure(0, weight=1)
@@ -137,7 +139,22 @@ def open_settings_window(root=None, log=None):
             tk.Entry(body, textvariable=var_dev, width=28,
                      bg=theme.CARD_BG, fg=theme.TEXT))
 
-    # ---------- BUTTONS ----------
+    # ---------- DEBUG LOGGING ----------
+    debug_frame = theme.make_frame(body, bg=theme.BG_MAIN)
+    tk.Checkbutton(
+        debug_frame,
+        text="🪲 Debug-Logging aktivieren",
+        variable=debug_var,
+        bg=theme.BG_MAIN,
+        fg=theme.TEXT,
+        selectcolor=theme.CARD_BG,
+        activebackground=theme.BG_MAIN,
+        font=theme.FONT_LABEL,
+        anchor="w"
+    ).pack(side="left", padx=6)
+    add_row(10, "Debug Mode:", debug_frame)
+
+    # ---------- FOOTER ----------
     footer = theme.make_frame(win, bg=theme.CARD_BG)
     footer.pack(fill="x", side="bottom", pady=(10, 0))
 
@@ -154,6 +171,7 @@ def open_settings_window(root=None, log=None):
                 "HUMID_DECIMALS": int(var_hdec.get()),
                 "VPD_DECIMALS": int(var_vdec.get()),
                 "theme": theme_var.get(),
+                "debug_logging": debug_var.get(),  # ✅ neu
             })
             utils.safe_write_json(config.CONFIG_FILE, cfg)
             messagebox.showinfo("Gespeichert", "💾 Einstellungen gespeichert.")

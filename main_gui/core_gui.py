@@ -38,8 +38,17 @@ def run_app(device_id=None):
     charts_frame.pack(side="top", fill="both", expand=True, padx=10, pady=(4, 6))
 
     # ---------- LOG ----------
-    log, _app_closing = create_log_frame(main_frame, config)
-    log("🌱 Dashboard gestartet – Logsystem aktiv")
+    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    debug_enabled = cfg.get("debug_logging", True)
+
+    if debug_enabled:
+        log, _app_closing = create_log_frame(main_frame, config)
+        log("🌱 Dashboard gestartet – Logsystem aktiv")
+    else:
+        # Dummy-Logger, wenn Debug deaktiviert
+        def log(*args, **kwargs):
+            pass
+        _app_closing = [False]
 
     # ---------- FOOTER ----------
     set_status, mark_data_update, set_sensor_status = create_footer(main_frame, config)
@@ -59,17 +68,6 @@ def run_app(device_id=None):
     except Exception as e:
         log(f"❌ Fehler beim Starten des Readers: {e}")
 
-    # ---------- STATUS WATCHER ----------
-    def update_status_from_file():
-        try:
-            with open(config.STATUS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            set_status(data.get("connected", False))
-        except Exception:
-            pass
-        root.after(2000, update_status_from_file)
-
-    update_status_from_file()
 
     # ---------- SHUTDOWN ----------
     def on_close():

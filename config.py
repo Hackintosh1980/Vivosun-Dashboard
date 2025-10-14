@@ -108,3 +108,6 @@ def load_active_theme():
 
 # Globale THEME-Variable für alle Module verfügbar machen
 THEME = load_active_theme()
+
+
+DEBUG_LOGGING = True  # Kann über Settings toggled werden
