@@ -12,7 +12,9 @@ import os, sys, config, utils
 # ------------------------------------------------------------
 # Themes laden
 # ------------------------------------------------------------
+from main_gui.theme_picker import create_theme_picker
 from themes import theme_vivosun, theme_oceanic
+
 try:
     from themes import theme_sunset
     THEMES = {
@@ -25,7 +27,6 @@ except ImportError:
         "🌿 VIVOSUN Green": theme_vivosun,
         "🌊 Oceanic Blue": theme_oceanic,
     }
-
 
 def open_settings_window(root=None, log=None):
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
@@ -64,24 +65,20 @@ def open_settings_window(root=None, log=None):
     body = theme.make_frame(win, bg=theme.BG_MAIN, padx=40, pady=30)
     body.pack(fill="both", expand=True)
 
-    # --- Theme Picker ---
-    tk.Label(body, text="🎨 Theme:", bg=theme.BG_MAIN, fg=theme.TEXT,
-             font=theme.FONT_LABEL, anchor="w").grid(row=0, column=0, sticky="w", pady=8)
-    theme_var = tk.StringVar(value=theme_name)
-    theme_dropdown = ttk.Combobox(
-        body, textvariable=theme_var,
-        values=list(THEMES.keys()), state="readonly", width=25
+# --- Theme Picker (ausgelagert) ---
+    def apply_selected_theme(event=None):
+        new_theme = THEMES.get(theme_var.get(), theme)
+        win.configure(bg=new_theme.BG_MAIN)
+        header.configure(bg=new_theme.CARD_BG)
+        body.configure(bg=new_theme.BG_MAIN)
+        footer.configure(bg=new_theme.CARD_BG)
+
+    theme_var, theme_dropdown, _ = create_theme_picker(
+        body,
+        theme_name,
+        on_change=lambda _: apply_selected_theme(),
+        theme=theme
     )
-    theme_dropdown.grid(row=0, column=1, sticky="w", pady=8)
-
-    style = ttk.Style()
-    style.theme_use("default")
-    style.configure("TCombobox",
-                    fieldbackground=theme.CARD_BG,
-                    background=theme.CARD_BG,
-                    foreground=theme.TEXT,
-                    arrowcolor=theme.TEXT)
-
     # --- Config Variablen ---
     device_id = cfg.get("device_id", "")
     unit_celsius = cfg.get("unit_celsius", True)
