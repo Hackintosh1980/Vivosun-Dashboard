@@ -38,9 +38,9 @@ def create_charts(parent, config, log=lambda *a, **k: None):
     hum_decimals  = cfg.get("HUMID_DECIMALS", getattr(config, "HUMID_DECIMALS", 1))
     vpd_decimals  = cfg.get("VPD_DECIMALS", getattr(config, "VPD_DECIMALS", 2))
 
-    leaf_off = float(getattr(config, "leaf_offset_c", [0.0])[0])
-    hum_off  = float(getattr(config, "humidity_offset", [0.0])[0])
-
+    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    leaf_off = float(cfg.get("leaf_offset", 0.0))
+    hum_off  = float(cfg.get("humidity_offset", 0.0))
     # --- Datenpuffer ---
     data_buffers = {k: [] for _, k, _ in CARD_LAYOUT}
     data_buffers["timestamps"] = []
@@ -162,22 +162,24 @@ def create_charts(parent, config, log=lambda *a, **k: None):
             t_ext  = d.get("t_ext")
             h_ext  = d.get("h_ext")
 
-            # Offsets live aus config laden (Header-Änderungen übernehmen)
-            try:
-                leaf_off = float(getattr(config, "leaf_offset_c", [0.0])[0])
-                hum_off  = float(getattr(config, "humidity_offset", [0.0])[0])
-            except Exception:
-                leaf_off, hum_off = 0.0, 0.0
-
-            # VPD-Berechnung unter Einbeziehung der Offsets
             vpd_int = utils.calc_vpd(
-                (t_main + leaf_off) if t_main is not None else None,
-                (h_main + hum_off)  if h_main is not None else None
+                t_main + leaf_off if t_main is not None else None,
+                h_main + hum_off  if h_main is not None else None
             )
             vpd_ext = utils.calc_vpd(
-                (t_ext + leaf_off) if t_ext is not None else None,
-                (h_ext + hum_off)  if h_ext is not None else None
+                t_ext + leaf_off if t_ext is not None else None,
+                h_ext + hum_off  if h_ext is not None else None
             )
+
+            snapshot = {
+                "t_main": t_main, "h_main": h_main, "vpd_int": vpd_int,
+                "t_ext": t_ext, "h_ext": h_ext, "vpd_ext": vpd_ext
+            }
+
+            for _, key, _ in CARD_LAYOUT:
+                data_buffers[key].append(snapshot.get(key))
+                data_buffers[key] = data_buffers[key][-200:]
+
             # --- Zeichnen ---
             for ax, (title, key, color), lbl in zip(axes, CARD_LAYOUT, labels):
                 if mode["compact"] and key.startswith(("t_ext", "h_ext", "vpd_ext")):
