@@ -138,7 +138,7 @@ def _open_enlarged(parent, config, utils,
         "24h": 1,
         "1w":  7,
     }
-    span_choice = tk.StringVar(value="1h")
+    span_choice = tk.StringVar(value="1m")
 
     # Achsenformatierung abhängig vom Zeitfenster
     def apply_locator(span_days: float):
@@ -169,7 +169,7 @@ def _open_enlarged(parent, config, utils,
         if xs:
             ax.set_xlim(xs[0], xs[-1])
             ax.relim()
-            ax.autoscale_view(scalex=False, scaley=True)
+            ax.autoscale_view(scalex=True, scaley=True)
             canvas.draw_idle()
 
     btn_pause = tk.Button(ctrl, text="⏸ Pause", command=toggle_pause,
