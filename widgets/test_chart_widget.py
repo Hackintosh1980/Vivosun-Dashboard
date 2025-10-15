@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-test_chart_widget.py – Modul für Live-Humidity-Charts (internal/external)
-Kann in jedes Fenster eingebunden werden.
+test_chart_widget.py – 🌿 Theme-fähiger Live-Chart für alle 6 Sensordaten
+Zeigt t_main, t_ext, t_leaf, h_main, h_ext, vpd aus data.json.
 """
 
 import tkinter as tk
@@ -11,132 +11,138 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import utils, config
 
 
-def create_chart_widget(parent, config=config, utils=utils):
-    """Erzeugt einen Live-Chart-Frame für interne & externe Feuchtigkeit."""
-    frame = tk.Frame(parent, bg=config.BG)
+def create_chart_widget(parent, theme=None, config=config, utils=utils):
+    """Erzeugt den Live-Chart für alle 6 Sensorwerte."""
+    theme = theme or getattr(config, "THEME", config)
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    fig.patch.set_facecolor(config.CARD)
-    ax.set_facecolor(config.CARD)
-    ax.grid(True, color="#333", linestyle=":", alpha=0.4)
-    ax.set_title("Humidity Live Chart", color=config.TEXT)
-    ax.set_xlabel("Samples", color=config.TEXT)
-    ax.set_ylabel("Humidity (%)", color=config.TEXT)
-    plt.setp(ax.get_xticklabels(), color=config.TEXT)
-    plt.setp(ax.get_yticklabels(), color=config.TEXT)
+    # Frame erstellen
+    frame = theme.make_frame(parent, bg=theme.BG_MAIN, padx=10, pady=10)
 
+    # Figure/Achsen
+    fig, ax_temp = plt.subplots(figsize=(10, 5), dpi=100)
+    fig.patch.set_facecolor(theme.CARD_BG)
+    ax_temp.set_facecolor(theme.CARD_BG)
+    ax_hum = ax_temp.twinx()
+
+    # Achsen & Stil
+    ax_temp.set_title("🌡️ Live Environmental Data", color=theme.TEXT, fontsize=13, weight="bold")
+    ax_temp.set_xlabel("Samples", color=theme.TEXT)
+    ax_temp.set_ylabel("Temperature (°C)", color=theme.TEXT)
+    ax_hum.set_ylabel("Humidity (%)", color=theme.TEXT)
+    for ax in [ax_temp, ax_hum]:
+        ax.grid(True, color=theme.BORDER, linestyle=":", alpha=0.4)
+        ax.tick_params(colors=theme.TEXT)
+        for spine in ax.spines.values():
+            spine.set_color(theme.BORDER)
+
+    # Canvas
     canvas = FigureCanvasTkAgg(fig, master=frame)
-    canvas.get_tk_widget().pack(fill="both", expand=True)
+    canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)
 
+    # Statusanzeige
     lbl_status = tk.Label(
         frame,
-        text="Initializing chart ...",
-        bg=config.BG,
-        fg=config.TEXT,
-        font=("Consolas", 12)
+        text="⏳ Waiting for sensor data ...",
+        bg=theme.BG_MAIN,
+        fg=theme.TEXT_DIM,
+        font=("Consolas", 11)
     )
     lbl_status.pack(pady=6)
 
-    data = {"internal": [], "external": []}
+    # Datenpuffer
+    data = {k: [] for k in ["t_main", "t_ext", "t_leaf", "h_main", "h_ext", "vpd"]}
     _running = [True]
 
-    # ---------- RESET ----------
+    # RESET
     def reset_chart():
-        """Leert Chart & JSON-Datei."""
-        data["internal"].clear()
-        data["external"].clear()
-        ax.clear()
-        ax.set_facecolor(config.CARD)
-        ax.grid(True, color="#333", linestyle=":", alpha=0.4)
-        ax.set_title("Humidity Live Chart", color=config.TEXT)
-        ax.set_xlabel("Samples", color=config.TEXT)
-        ax.set_ylabel("Humidity (%)", color=config.TEXT)
+        for k in data:
+            data[k].clear()
+        ax_temp.clear()
+        ax_hum.clear()
+        ax_temp.set_facecolor(theme.CARD_BG)
+        ax_hum.set_facecolor(theme.CARD_BG)
+        ax_temp.grid(True, color=theme.BORDER, linestyle=":", alpha=0.4)
+        ax_temp.set_title("🌡️ Live Environmental Data", color=theme.TEXT)
+        lbl_status.config(text="🧹 Chart reset – waiting for data ...", fg=theme.BTN_SECONDARY)
         canvas.draw_idle()
 
-        utils.safe_write_json(config.DATA_FILE, {
-            "timestamp": None,
-            "t_main": None,
-            "h_main": None,
-            "t_ext": None,
-            "h_ext": None,
-        })
-        lbl_status.config(text="🧹 Chart reset – waiting for data …", fg="orange")
-        print("🧹 Chart reset complete.")
-
-    # ---------- POLLING ----------
+    # POLLING
     def poll_chart():
-        """Aktualisiert die Daten & zeichnet den Chart neu."""
         if not _running[0]:
             return
-
         try:
             status = utils.safe_read_json(config.STATUS_FILE) or {}
-            connected = status.get("connected", False)
-
-            d = utils.safe_read_json(config.DATA_FILE) or {}
-            hm = d.get("h_main")
-            he = d.get("h_ext")
-
-            if not connected or (hm is None and he is None):
-                ax.clear()
-                ax.set_facecolor(config.CARD)
-                ax.grid(True, color="#333", linestyle=":", alpha=0.4)
-                ax.set_title("Humidity Live Chart", color=config.TEXT)
-                ax.set_xlabel("Samples", color=config.TEXT)
-                ax.set_ylabel("Humidity (%)", color=config.TEXT)
-                canvas.draw_idle()
-
-                lbl_status.config(
-                    text="[🔴] Disconnected or waiting for data …",
-                    fg="red" if not connected else "orange"
-                )
-
+            if not status.get("connected", False):
+                lbl_status.config(text="🔴 Disconnected", fg="red")
                 frame.after(2000, poll_chart)
                 return
 
-            # --- Daten hinzufügen ---
-            if hm is not None:
-                data["internal"].append(hm)
-                data["internal"] = data["internal"][-100:]
-            if he is not None:
-                data["external"].append(he)
-                data["external"] = data["external"][-100:]
+            d = utils.safe_read_json(config.DATA_FILE) or {}
+            for k in data:
+                val = d.get(k)
+                if val is not None:
+                    data[k].append(val)
+                    data[k] = data[k][-200:]
 
-            # --- Plot zeichnen ---
-            ax.clear()
-            ax.set_facecolor(config.CARD)
-            ax.grid(True, color="#333", linestyle=":", alpha=0.4)
-            ax.set_title("Humidity Live Chart", color=config.TEXT)
-            ax.set_xlabel("Samples", color=config.TEXT)
-            ax.set_ylabel("Humidity (%)", color=config.TEXT)
+            # Zeichnen
+            ax_temp.clear()
+            ax_hum.clear()
+            ax_temp.set_facecolor(theme.CARD_BG)
+            ax_hum.set_facecolor(theme.CARD_BG)
+            ax_temp.grid(True, color=theme.BORDER, linestyle=":", alpha=0.4)
 
-            if data["internal"]:
-                ax.plot(data["internal"], color="lime", linewidth=2, label="Internal")
-            if data["external"]:
-                ax.plot(data["external"], color="orange", linewidth=2, label="External")
+            # Temperaturen
+            if data["t_main"]:
+                ax_temp.plot(data["t_main"], color=theme.BTN_PRIMARY, linewidth=2, label="T Main")
+            if data["t_ext"]:
+                ax_temp.plot(data["t_ext"], color="#1E90FF", linewidth=2, label="T Ext")
+            if data["t_leaf"]:
+                ax_temp.plot(data["t_leaf"], color="#FFD700", linewidth=2, label="T Leaf")
 
-            if data["internal"] or data["external"]:
-                ax.legend(facecolor=config.CARD, edgecolor="gray", labelcolor=config.TEXT)
+            # Feuchtigkeit
+            if data["h_main"]:
+                ax_hum.plot(data["h_main"], color="#32CD32", linestyle="--", linewidth=2, label="H Main")
+            if data["h_ext"]:
+                ax_hum.plot(data["h_ext"], color="#FF8C00", linestyle="--", linewidth=2, label="H Ext")
 
-            plt.setp(ax.get_xticklabels(), color=config.TEXT)
-            plt.setp(ax.get_yticklabels(), color=config.TEXT)
+            # VPD
+            if data["vpd"]:
+                ax_temp.plot(data["vpd"], color="#FF4444", linestyle=":", linewidth=2, label="VPD")
+
+            # Legende
+            h_temp, l_temp = ax_temp.get_legend_handles_labels()
+            h_hum, l_hum = ax_hum.get_legend_handles_labels()
+            leg = ax_temp.legend(
+                h_temp + h_hum,
+                l_temp + l_hum,
+                facecolor=theme.CARD_BG,
+                edgecolor=theme.BORDER,
+                labelcolor=theme.TEXT,
+                fontsize=9
+            )
+            for t in leg.get_texts():
+                t.set_color(theme.TEXT)
+
+            plt.setp(ax_temp.get_xticklabels(), color=theme.TEXT)
+            plt.setp(ax_temp.get_yticklabels(), color=theme.TEXT)
+            plt.setp(ax_hum.get_yticklabels(), color=theme.TEXT)
             canvas.draw_idle()
 
             lbl_status.config(
-                text=f"[🟢] Connected | Int: {hm:.1f}% | Ext: {he:.1f}%",
-                fg="lime"
+                text=f"[🟢] Connected | "
+                     f"T_main: {d.get('t_main', 0):.1f}°C | "
+                     f"H_main: {d.get('h_main', 0):.1f}% | "
+                     f"VPD: {d.get('vpd', 0):.2f} kPa",
+                fg=theme.LIME if hasattr(theme, "LIME") else "#00FF7F"
             )
-
         except Exception as e:
             lbl_status.config(text=f"⚠️ Poll error: {e}", fg="orange")
-
         frame.after(2000, poll_chart)
 
-    # ---------- STOP ----------
+    # STOP
     def stop_chart():
-        """Beendet das Polling sauber."""
         _running[0] = False
+        lbl_status.config(text="⏹ Chart stopped", fg="orange")
 
     poll_chart()
-
     return frame, reset_chart, stop_chart

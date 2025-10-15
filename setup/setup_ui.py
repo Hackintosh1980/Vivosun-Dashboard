@@ -23,9 +23,9 @@ def build_gui(root, theme):
 
     # Compact Mode Layoutgrößen
     if getattr(config, "COMPACT_MODE", False):
-        root.geometry("980x720")
+        root.geometry("450x720")
     else:
-        root.geometry("1180x840")
+        root.geometry("500x840")
 
     root.configure(bg=theme.BG_MAIN)
 
