@@ -8,13 +8,12 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
 import os, sys, config, utils
+from main_gui import theme_picker
 
 # ------------------------------------------------------------
 # Themes laden
 # ------------------------------------------------------------
-from main_gui.theme_picker import create_theme_picker
 from themes import theme_vivosun, theme_oceanic
-
 try:
     from themes import theme_sunset
     THEMES = {
@@ -28,6 +27,10 @@ except ImportError:
         "🌊 Oceanic Blue": theme_oceanic,
     }
 
+
+# ------------------------------------------------------------
+# SETTINGS WINDOW
+# ------------------------------------------------------------
 def open_settings_window(root=None, log=None):
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     theme_name = cfg.get("theme", "🌿 VIVOSUN Green")
@@ -65,21 +68,28 @@ def open_settings_window(root=None, log=None):
     body = theme.make_frame(win, bg=theme.BG_MAIN, padx=40, pady=30)
     body.pack(fill="both", expand=True)
 
-# --- Theme Picker (ausgelagert) ---
-    def apply_selected_theme(event=None):
-        new_theme = THEMES.get(theme_var.get(), theme)
+    # --- Theme Picker (einheitlich aus theme_picker.py) ---
+    tk.Label(
+        body, text="🎨 Theme:",
+        bg=theme.BG_MAIN, fg=theme.TEXT,
+        font=theme.FONT_LABEL, anchor="w"
+    ).grid(row=0, column=0, sticky="w", pady=8)
+
+    def apply_selected_theme(new_theme_name):
+        new_theme = theme_picker.get_available_themes().get(new_theme_name, theme)
         win.configure(bg=new_theme.BG_MAIN)
         header.configure(bg=new_theme.CARD_BG)
         body.configure(bg=new_theme.BG_MAIN)
         footer.configure(bg=new_theme.CARD_BG)
 
-    theme_var, theme_dropdown, _ = create_theme_picker(
+    theme_dropdown, theme_var = theme_picker.create_theme_picker(
         body,
-        theme_name,
-        on_change=lambda _: apply_selected_theme(),
-        theme=theme
+        current_theme=theme_name,
+        on_change=apply_selected_theme
     )
-    # --- Config Variablen ---
+    theme_dropdown.grid(row=0, column=1, sticky="w", pady=8)
+
+    # ---------- CONFIG VARIABLEN ----------
     device_id = cfg.get("device_id", "")
     unit_celsius = cfg.get("unit_celsius", True)
     reconnect = cfg.get("RECONNECT_DELAY", config.RECONNECT_DELAY)
@@ -98,7 +108,7 @@ def open_settings_window(root=None, log=None):
     var_vdec = tk.IntVar(value=vpd_dec)
     debug_var = tk.BooleanVar(value=debug_enabled)
 
-    # ---------- GRID LAYOUT ----------
+    # ---------- GRID SETUP ----------
     body.columnconfigure(0, weight=1)
     body.columnconfigure(1, weight=1)
 
@@ -107,7 +117,7 @@ def open_settings_window(root=None, log=None):
                  font=theme.FONT_LABEL, anchor="w").grid(row=row, column=0, sticky="w", pady=8)
         widget.grid(row=row, column=1, sticky="w", pady=8)
 
-    # --- Einstellungen ---
+    # ---------- SETTINGS ----------
     unit_frame = theme.make_frame(body, bg=theme.BG_MAIN)
     tk.Radiobutton(unit_frame, text="Celsius (°C)", variable=var_unit, value=True,
                    bg=theme.BG_MAIN, fg=theme.TEXT, selectcolor=theme.CARD_BG).pack(side="left", padx=8)
@@ -155,8 +165,8 @@ def open_settings_window(root=None, log=None):
     footer = theme.make_frame(win, bg=theme.CARD_BG)
     footer.pack(fill="x", side="bottom", pady=(10, 0))
 
+    # ---------- BUTTONS ----------
     def save_settings():
-        """Speichert alle Änderungen (inkl. Theme & Dezimalpräzision)."""
         try:
             cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
             cfg.update({
@@ -168,7 +178,7 @@ def open_settings_window(root=None, log=None):
                 "HUMID_DECIMALS": int(var_hdec.get()),
                 "VPD_DECIMALS": int(var_vdec.get()),
                 "theme": theme_var.get(),
-                "debug_logging": debug_var.get(),  # ✅ neu
+                "debug_logging": debug_var.get(),
             })
             utils.safe_write_json(config.CONFIG_FILE, cfg)
             messagebox.showinfo("Gespeichert", "💾 Einstellungen gespeichert.")
@@ -195,18 +205,9 @@ def open_settings_window(root=None, log=None):
         except Exception as e:
             messagebox.showerror("Fehler", f"⚠️ Neustart fehlgeschlagen: {e}")
 
-    # --- Buttons mit Theme-Farben ---
     theme.make_button(footer, "💾 Save", save_settings, color=theme.BTN_PRIMARY).pack(side="left", padx=20, pady=15)
     theme.make_button(footer, "🧩 Reset Device ID", reset_device_id, color=theme.BTN_SECONDARY).pack(side="left", padx=10, pady=15)
     theme.make_button(footer, "🔄 Restart Program", restart_program, color=theme.BTN_RESET).pack(side="left", padx=10, pady=15)
     theme.make_button(footer, "❌ Close", win.destroy, color=theme.ORANGE if hasattr(theme, "ORANGE") else "#FF4444").pack(side="right", padx=20, pady=15)
 
-    def apply_selected_theme(event=None):
-        new_theme = THEMES.get(theme_var.get(), theme)
-        win.configure(bg=new_theme.BG_MAIN)
-        header.configure(bg=new_theme.CARD_BG)
-        body.configure(bg=new_theme.BG_MAIN)
-        footer.configure(bg=new_theme.CARD_BG)
-
-    theme_dropdown.bind("<<ComboboxSelected>>", apply_selected_theme)
     return win

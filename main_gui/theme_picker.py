@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-theme_picker.py – universeller Theme-Auswahl-Widget für das 🌱 VIVOSUN Dashboard
-Kann in Settings, Header oder anderen Fenstern eingebunden werden.
+theme_picker.py – Wiederverwendbarer Theme-Picker für 🌱 VIVOSUN Dashboard & Setup
 """
 
 import tkinter as tk
 from tkinter import ttk
+import utils, config
 from themes import theme_vivosun, theme_oceanic
 
 try:
@@ -23,52 +23,47 @@ except ImportError:
     }
 
 
-def create_theme_picker(parent, current_theme_name, on_change=None, theme=None):
-    """
-    Erstellt ein Theme-Picker-Widget (Label + Combobox).
-    
-    parent        – Tkinter-Container, in den das Widget eingefügt wird
-    current_theme_name – aktuell gesetztes Theme (z.B. aus config)
-    on_change     – Callback-Funktion bei Theme-Wechsel
-    theme         – aktives Theme-Objekt (für Farben)
-    """
-    if theme is None:
-        theme = theme_vivosun  # Fallback
+def get_available_themes():
+    return THEMES
 
-    tk.Label(
-        parent,
-        text="🎨 Theme:",
-        bg=theme.BG_MAIN,
-        fg=theme.TEXT,
-        font=theme.FONT_LABEL,
-        anchor="w"
-    ).grid(row=0, column=0, sticky="w", pady=8)
 
-    theme_var = tk.StringVar(value=current_theme_name)
-    theme_dropdown = ttk.Combobox(
+def load_theme_from_config():
+    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    t = cfg.get("theme", "🌿 VIVOSUN Green")
+    return t if t in THEMES else "🌿 VIVOSUN Green"
+
+
+def save_theme_to_config(t):
+    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    cfg["theme"] = t
+    utils.safe_write_json(config.CONFIG_FILE, cfg)
+
+
+def create_theme_picker(parent, current_theme=None, on_change=None):
+    theme_var = tk.StringVar(value=current_theme or load_theme_from_config())
+    combo = ttk.Combobox(
         parent,
         textvariable=theme_var,
         values=list(THEMES.keys()),
         state="readonly",
-        width=25
+        width=25,
     )
-    theme_dropdown.grid(row=0, column=1, sticky="w", pady=8)
 
-    # Style anpassen
     style = ttk.Style()
     style.theme_use("default")
     style.configure(
         "TCombobox",
-        fieldbackground=theme.CARD_BG,
-        background=theme.CARD_BG,
-        foreground=theme.TEXT,
-        arrowcolor=theme.TEXT
+        fieldbackground="#1b1b1b",
+        background="#1b1b1b",
+        foreground="#dddddd",
+        arrowcolor="#cccccc",
     )
 
-    def _on_change(event=None):
-        if callable(on_change):
-            on_change(theme_var.get())
+    def _on_select(event=None):
+        selected = theme_var.get()
+        save_theme_to_config(selected)
+        if on_change:
+            on_change(selected)
 
-    theme_dropdown.bind("<<ComboboxSelected>>", _on_change)
-
-    return theme_var, theme_dropdown, THEMES
+    combo.bind("<<ComboboxSelected>>", _on_select)
+    return combo, theme_var
