@@ -253,3 +253,12 @@ def create_charts(root, config, log):
 
     update()
     return frame, data_buffers, data_buffers["timestamps"]
+# charts_gui.py – am Ende von create_charts()
+
+    # Am Ende von create_charts():
+    try:
+        import builtins
+        builtins._vivosun_chart_frame = frame
+    except Exception:
+        pass
+

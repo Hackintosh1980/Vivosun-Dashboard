@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-async_reader.py – stabile Version mit getrennter Sensorerkennung
-Aktualisiert status.json gemäß:
-{
-  "connected": bool,
-  "sensor_ok_main": bool,
-  "sensor_ok_ext": bool,
-  "sensor_ok": bool
-}
-und leert thermo_values.json bei Disconnect.
+async_reader.py – stabile Version mit automatischem Reconnect bei externem Sensorwechsel.
 """
 
 import asyncio
@@ -18,26 +10,23 @@ import traceback
 import threading
 import os
 import sys
+import time
 
 try:
     from . import utils, config
 except ImportError:
     import utils, config
 
-
 _log_callback = None
 _status_callback = None
-
 
 def set_log_callback(func):
     global _log_callback
     _log_callback = func
 
-
 def set_status_callback(func):
     global _status_callback
     _status_callback = func
-
 
 def _log(msg):
     print(msg)
@@ -46,7 +35,6 @@ def _log(msg):
             _log_callback(msg)
         except Exception:
             pass
-
 
 def _status(connected: bool):
     if _status_callback:
@@ -75,12 +63,14 @@ _thread = None
 _stop_event = threading.Event()
 STATUS_FILE = resource_path(getattr(config, "STATUS_FILE", "status.json"))
 
+# Wir merken uns den vorherigen Zustand des externen Sensors:
+_last_sensor_ok_ext = [False]
+
 
 # -------------------------------------------------------------------
 # Hilfsfunktionen
 # -------------------------------------------------------------------
 def sanitize(value):
-    """Filtert unplausible Sensorwerte (-0.07 … +0.07 = kein Signal)."""
     if value is None:
         return None
     try:
@@ -102,35 +92,91 @@ def _clear_data_file():
             "t_ext": None,
             "h_ext": None,
         })
-        _log("🧹 DATA_FILE geleert (Verbindungsverlust).")
+        _log("🧹 DATA_FILE geleert (Verbindungsverlust oder Sensor-Wechsel).")
     except Exception as e:
         _log(f"⚠️ DATA_FILE konnte nicht geleert werden: {e}")
 
 
-def _update_status(connected: bool, sensor_ok_main: bool, sensor_ok_ext: bool):
-    """Schreibt status.json bei jedem Zyklus neu; leert DATA_FILE bei Disconnect."""
+def _trigger_chart_reset():
+    """Versucht, das Chart-GUI im Hauptprogramm zurückzusetzen."""
     try:
+        # 1️⃣ Prüfen, ob ein aktiver Chart-Frame bekannt ist
+        import config
+        charts_frame = getattr(config, "active_charts_frame", None)
+
+        if charts_frame and hasattr(charts_frame, "reset_charts"):
+            charts_frame.reset_charts()
+            _log("✅ Chart-Frame über config.reset_charts() zurückgesetzt.")
+            return
+
+        # 2️⃣ Falls nicht in config → global gespeicherte Referenz probieren
+        import builtins
+        charts_frame = getattr(builtins, "_vivosun_chart_frame", None)
+        if charts_frame and hasattr(charts_frame, "reset_charts"):
+            charts_frame.reset_charts()
+            _log("✅ Chart-Frame über builtins._vivosun_chart_frame zurückgesetzt.")
+            return
+
+        # 3️⃣ Fallback: Direktes Importieren von charts_gui (wenn geladen)
+        try:
+            import main_gui.charts_gui as charts_gui
+            if hasattr(charts_gui, "data_buffers"):
+                for key, buf in charts_gui.data_buffers.items():
+                    if isinstance(buf, list):
+                        buf.clear()
+                if "timestamps" in charts_gui.data_buffers:
+                    charts_gui.data_buffers["timestamps"].clear()
+                _log("✅ Charts direkt über Datenpuffer geleert (Fallback).")
+                return
+        except Exception:
+            pass
+
+        _log("⚠️ Kein aktiver Chart-Frame (config.active_charts_frame fehlt).")
+
+    except Exception as e:
+        _log(f"⚠️ Fehler beim Chart-Reset aus async_reader: {e}")
+
+
+def _update_status(connected: bool, sensor_ok_main: bool, sensor_ok_ext: bool):
+    """Schreibt status.json neu, erkennt externe Sensor-Wechsel und triggert Reconnect."""
+    try:
+        global _last_sensor_ok_ext
+
         data = {
             "connected": connected,
             "sensor_ok_main": sensor_ok_main,
             "sensor_ok_ext": sensor_ok_ext,
-            # Rückwärtskompatibilität für ältere Module
             "sensor_ok": sensor_ok_main or sensor_ok_ext
         }
 
         utils.safe_write_json(STATUS_FILE, data)
         _status(connected)
 
+        # 🧹 Bei kompletter Trennung → Daten löschen
         if not connected:
             _clear_data_file()
+
+        # 🔁 Externer Sensor von False → True → Soft-Reconnect
+        if sensor_ok_ext and not _last_sensor_ok_ext[0]:
+            _log("🔁 Externer Sensor wieder erkannt – Soft-Reconnect & Chart-Reset.")
+            _trigger_chart_reset()
+
+        # 🧹 Externer Sensor entfernt → Datenfile leeren
+        elif not sensor_ok_ext and _last_sensor_ok_ext[0]:
+            _log("🧹 Externer Sensor entfernt – DATA_FILE leeren.")
+            _clear_data_file()
+
+        _last_sensor_ok_ext[0] = sensor_ok_ext
 
     except Exception as e:
         _log(f"⚠️ Fehler im Status-Update: {e}")
 
 
 # -------------------------------------------------------------------
-# Haupt-Async-Loop
+# Haupt-Async-Loop (mit Sensor-Reset-Erkennung)
 # -------------------------------------------------------------------
+_sensor_reset_pending = False  # globales Flag außerhalb der Schleifen
+
 async def _read_loop(device_id, log_callback=None):
     from vivosun_thermo import (
         VivosunThermoClient,
@@ -139,18 +185,30 @@ async def _read_loop(device_id, log_callback=None):
         UNIT_CELSIUS,
     )
 
-    SCAN_INTERVAL = getattr(config, "SCAN_INTERVAL", 2)
+    SCAN_INTERVAL = getattr(config, "SCAN_INTERVAL", 5)
     RECONNECT_DELAY = getattr(config, "RECONNECT_DELAY", 10)
+
+    last_ext_state = None  # Merkt sich den letzten Sensorstatus
 
     while _running and not _stop_event.is_set():
         try:
             async with VivosunThermoClient(device_id) as client:
                 _log(f"✅ Connected to device {device_id}")
-                # Nach Connect sofort Status setzen (auch wenn Sensorwerte noch None sind)
                 _update_status(True, False, False)
 
                 while _running and not _stop_event.is_set():
                     try:
+                        global _sensor_reset_pending
+
+                        # --- Prüfe, ob Sensor-Reset markiert wurde ---
+                        if _sensor_reset_pending:
+                            _log("🧹 Sensor-Reset aktiv – DATA_FILE leeren & Charts zurücksetzen …")
+                            _clear_data_file()
+                            _trigger_chart_reset()
+                            _sensor_reset_pending = False
+                            await asyncio.sleep(2)
+                            continue
+
                         # --- Sensorwerte lesen ---
                         t_main = sanitize(await client.current_temperature(PROBE_MAIN, UNIT_CELSIUS))
                         h_main = sanitize(await client.current_humidity(PROBE_MAIN))
@@ -161,10 +219,21 @@ async def _read_loop(device_id, log_callback=None):
                         sensor_ok_main = (t_main is not None and h_main is not None)
                         sensor_ok_ext  = (t_ext  is not None and h_ext  is not None)
 
-                        # --- Status schreiben (jede Runde) ---
+                        # --- Wenn sich der externe Sensorstatus geändert hat ---
+                        if last_ext_state is None:
+                            last_ext_state = sensor_ok_ext
+                        elif last_ext_state != sensor_ok_ext:
+                            last_ext_state = sensor_ok_ext
+                            _sensor_reset_pending = True
+                            if sensor_ok_ext:
+                                _log("🔁 Externer Sensor erkannt – Soft-Reconnect & Chart-Reset markiert.")
+                            else:
+                                _log("🔌 Externer Sensor entfernt – Chart-Reset markiert.")
+
+                        # --- Statusdatei aktualisieren ---
                         _update_status(True, sensor_ok_main, sensor_ok_ext)
 
-                        # --- Snapshot schreiben (auch mit None-Werten, damit GUI korrekt reagiert) ---
+                        # --- Daten speichern ---
                         payload = {
                             "timestamp": datetime.datetime.utcnow().isoformat(),
                             "t_main": t_main,
@@ -174,7 +243,7 @@ async def _read_loop(device_id, log_callback=None):
                         }
                         utils.safe_write_json(resource_path(config.DATA_FILE), payload)
 
-                        # --- CSV-Logging für internen Sensor (falls valide) ---
+                        # --- CSV Logging (optional) ---
                         ts_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         vpd = utils.calc_vpd(t_main, h_main) if sensor_ok_main else None
                         utils.append_csv_row(
@@ -184,15 +253,13 @@ async def _read_loop(device_id, log_callback=None):
                         )
 
                     except Exception as e:
-                        # Jede Lese-Exception betrachten wir als Verbindungsproblem → sauberer Disconnect
                         _log(f"⚠️ Device read error – reconnecting: {type(e).__name__}: {e}")
-                        _update_status(False, False, False)  # leert auch DATA_FILE
-                        break  # verlässt die innere Schleife → Context schließt → Reconnect
+                        _update_status(False, False, False)
+                        break
 
                     await asyncio.sleep(SCAN_INTERVAL)
 
         except Exception as e:
-            # Verbindung konnte nicht aufgebaut/aufrechterhalten werden
             _log(f"❌ Bluetooth connection failed: {type(e).__name__}: {e}")
             _update_status(False, False, False)
 
@@ -201,8 +268,6 @@ async def _read_loop(device_id, log_callback=None):
 
         _log(f"🔄 Reconnecting in {RECONNECT_DELAY}s ...")
         await asyncio.sleep(RECONNECT_DELAY)
-
-
 # -------------------------------------------------------------------
 # Thread-Wrapper
 # -------------------------------------------------------------------
@@ -244,16 +309,3 @@ def stop_reader():
         _update_status(False, False, False)
     except Exception:
         pass
-
-
-# -------------------------------------------------------------------
-# CLI-Hilfsfunktionen
-# -------------------------------------------------------------------
-def list_devices():
-    cfg = utils.safe_read_json(resource_path(config.CONFIG_FILE)) or {}
-    did = cfg.get("device_id")
-    return [did] if did else []
-
-
-def scan_once():
-    return utils.safe_read_json(resource_path(config.DATA_FILE))
