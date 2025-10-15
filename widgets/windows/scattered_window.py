@@ -154,15 +154,12 @@ def open_window(parent, config=config, utils=utils):
     entry_hum.bind("<Return>", on_key)
 
     # --- Reset Button ---
-    tk.Button(
+    THEME.make_button(
         header,
-        text="↺ Reset Offsets",
-        bg=getattr(THEME, "ORANGE", "#ff8844"),
-        fg="black",
-        relief="flat",
-        font=("Segoe UI", 11, "bold"),
-        command=lambda: utils.set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True)
-    ).pack(side="right", padx=12)
+        "↺ Reset Offsets",
+        lambda: utils.set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True),
+        color=getattr(THEME, "LIME", "#00FF88")
+    ).pack(side="right", padx=12, pady=4)
 
     # --- 🔗 Globale Callback-Verbindung (Header -> Scatter) ---
     def on_global_offset_change(leaf_c, hum):
