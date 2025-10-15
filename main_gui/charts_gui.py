@@ -109,7 +109,7 @@ def create_charts(parent, config, log=lambda *a, **k: None):
             anchor="w",
             justify="left"
         )
-        lbl_title.place(relx=0.08, rely=0.2, anchor="nw")
+        lbl_title.place(relx=0.08, rely=0.26, anchor="nw")
 
         # --- Klick → Enlarged View ---
         def make_open(key=key):

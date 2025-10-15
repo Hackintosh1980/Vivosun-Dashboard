@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-settings_gui.py – 🌱 VIVOSUN Dashboard Settings (voll theme-fähig)
+settings_gui.py – 🌱 VIVOSUN Dashboard Settings (Admin Mode – keine Bestätigungen)
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from PIL import Image, ImageTk
 import os, sys, config, utils
 from main_gui import theme_picker
@@ -32,7 +32,7 @@ def open_settings_window(root=None, log=None):
 
     win = tk.Toplevel(root)
     win.title("🌱 VIVOSUN Dashboard – Settings")
-    win.geometry("820x920")
+    win.geometry("820x900")
     win.configure(bg=theme.BG_MAIN)
 
     # ---------- HEADER ----------
@@ -70,6 +70,8 @@ def open_settings_window(root=None, log=None):
         new_theme = theme_picker.get_available_themes().get(new_name)
         if new_theme:
             theme_picker.save_theme_to_config(new_name)
+            if log:
+                log(f"🎨 Theme geändert auf: {new_name}")
             win.destroy()
             open_settings_window(root, log)
 
@@ -102,7 +104,6 @@ def open_settings_window(root=None, log=None):
                        selectcolor=theme.CARD_BG, activebackground=theme.BG_MAIN).pack(side="left", padx=8)
     add_row(1, "Temperature Unit:", unit_frame)
 
-    # Spinboxes mit Themefarben
     def make_spinbox(var, to, inc=0.001):
         return tk.Spinbox(
             body, textvariable=var, from_=0.001, to=to, increment=inc,
@@ -135,37 +136,38 @@ def open_settings_window(root=None, log=None):
     footer.pack(fill="x", pady=(10, 0))
 
     def save_settings():
-        try:
-            cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-            cfg.update({
-                "device_id": var_dev.get(),
-                "unit_celsius": var_unit.get(),
-                "RECONNECT_DELAY": float(var_rec.get()),
-                "SENSOR_POLL_INTERVAL": float(var_poll.get()),
-                "TEMP_DECIMALS": int(var_tdec.get()),
-                "HUMID_DECIMALS": int(var_hdec.get()),
-                "VPD_DECIMALS": int(var_vdec.get()),
-                "theme": theme_var.get(),
-                "debug_logging": debug_var.get(),
-            })
-            utils.safe_write_json(config.CONFIG_FILE, cfg)
-            messagebox.showinfo("Gespeichert", "💾 Einstellungen gespeichert.")
-        except Exception as e:
-            messagebox.showerror("Fehler", f"❌ Fehler beim Speichern: {e}")
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+        cfg.update({
+            "device_id": var_dev.get(),
+            "unit_celsius": var_unit.get(),
+            "RECONNECT_DELAY": float(var_rec.get()),
+            "SENSOR_POLL_INTERVAL": float(var_poll.get()),
+            "TEMP_DECIMALS": int(var_tdec.get()),
+            "HUMID_DECIMALS": int(var_hdec.get()),
+            "VPD_DECIMALS": int(var_vdec.get()),
+            "theme": theme_var.get(),
+            "debug_logging": debug_var.get(),
+        })
+        utils.safe_write_json(config.CONFIG_FILE, cfg)
+        if log:
+            log("💾 Settings gespeichert.")
+        print("💾 Einstellungen gespeichert.")
 
     def reset_device_id():
         cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
         cfg["device_id"] = ""
         utils.safe_write_json(config.CONFIG_FILE, cfg)
         var_dev.set("")
-        messagebox.showinfo("Reset", "🧩 Device-ID gelöscht.")
+        if log:
+            log("🧩 Device-ID zurückgesetzt.")
+        print("🧩 Device-ID gelöscht.")
 
     def restart_program():
-        messagebox.showinfo("Restart", "🔄 Das Dashboard wird neu gestartet.")
+        print("🔄 Restart initiated by admin ...")
         python = sys.executable
         os.execl(python, python, *sys.argv)
 
-    # Theme-Buttons nutzen Theme-Farben
+    # Buttons direkt ausführen (keine Bestätigungen)
     theme.make_button(footer, "💾 Save", save_settings, color=theme.BTN_PRIMARY).pack(side="left", padx=20, pady=15)
     theme.make_button(footer, "🧩 Reset Device ID", reset_device_id, color=theme.BTN_SECONDARY).pack(side="left", padx=10, pady=15)
     theme.make_button(footer, "🔄 Restart", restart_program, color=theme.BTN_RESET).pack(side="left", padx=10, pady=15)
