@@ -25,6 +25,9 @@ CARD_LAYOUT = [
     ("🫧 External VPD",   "vpd_ext", "#ff4444"),
 ]
 
+# 🔄 Globale Referenz für Chart-Reset
+global_data_buffers = None
+
 
 def create_charts(parent, config, log=lambda *a, **k: None):
     """Erzeugt 6-Karten-Dashboard mit Auto-Switch Compact ↔ Full + Click-to-Enlarge."""
@@ -38,12 +41,16 @@ def create_charts(parent, config, log=lambda *a, **k: None):
     hum_decimals  = cfg.get("HUMID_DECIMALS", getattr(config, "HUMID_DECIMALS", 1))
     vpd_decimals  = cfg.get("VPD_DECIMALS", getattr(config, "VPD_DECIMALS", 2))
 
-    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     leaf_off = float(cfg.get("leaf_offset", 0.0))
     hum_off  = float(cfg.get("humidity_offset", 0.0))
+
     # --- Datenpuffer ---
     data_buffers = {k: [] for _, k, _ in CARD_LAYOUT}
     data_buffers["timestamps"] = []
+
+    # 🔄 Globale Referenz aktualisieren
+    global global_data_buffers
+    global_data_buffers = data_buffers
 
     # --- Chart-Grid ---
     cards, axes, figs, labels = [], [], [], []
@@ -131,6 +138,7 @@ def create_charts(parent, config, log=lambda *a, **k: None):
     # --- Update Loop ---
     def update():
         try:
+            # --- Sensorstatus prüfen ---
             st = utils.safe_read_json(config.STATUS_FILE) or {}
             ext_ok = bool(st.get("sensor_ok_ext", False))
             if ext_ok and mode["compact"]:
@@ -146,6 +154,7 @@ def create_charts(parent, config, log=lambda *a, **k: None):
                         cards[i][0].grid_remove()
                 log("🔁 Compact Mode (no external sensor)")
 
+            # --- Daten laden ---
             d = utils.safe_read_json(config.DATA_FILE) or {}
             if not d or all(v is None for v in d.values()):
                 reset_charts()
@@ -156,24 +165,35 @@ def create_charts(parent, config, log=lambda *a, **k: None):
             data_buffers["timestamps"].append(ts)
             data_buffers["timestamps"] = data_buffers["timestamps"][-200:]
 
-            # Werte & VPD
+            # --- Messwerte ---
             t_main = d.get("t_main")
             h_main = d.get("h_main")
             t_ext  = d.get("t_ext")
             h_ext  = d.get("h_ext")
 
+            # --- Offsets live aus Config laden ---
+            cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+            leaf_off = float(cfg.get("leaf_offset", 0.0))
+            hum_off  = float(cfg.get("humidity_offset", 0.0))
+
+            # --- VPD mit Offsets berechnen ---
             vpd_int = utils.calc_vpd(
-                t_main + leaf_off if t_main is not None else None,
-                h_main + hum_off  if h_main is not None else None
+                (t_main + leaf_off) if t_main is not None else None,
+                (h_main + hum_off)  if h_main is not None else None
             )
             vpd_ext = utils.calc_vpd(
-                t_ext + leaf_off if t_ext is not None else None,
-                h_ext + hum_off  if h_ext is not None else None
+                (t_ext + leaf_off) if t_ext is not None else None,
+                (h_ext + hum_off)  if h_ext is not None else None
             )
 
+            # --- Snapshot mit Offsets ---
             snapshot = {
-                "t_main": t_main, "h_main": h_main, "vpd_int": vpd_int,
-                "t_ext": t_ext, "h_ext": h_ext, "vpd_ext": vpd_ext
+                "t_main": t_main,
+                "h_main": (h_main + hum_off) if h_main is not None else None,
+                "vpd_int": vpd_int,
+                "t_ext": t_ext,
+                "h_ext": (h_ext + hum_off) if h_ext is not None else None,
+                "vpd_ext": vpd_ext
             }
 
             for _, key, _ in CARD_LAYOUT:
@@ -195,6 +215,7 @@ def create_charts(parent, config, log=lambda *a, **k: None):
                 for s in ax.spines.values():
                     s.set_visible(False)
 
+                # --- Plotten ---
                 if len(x) > 1 and any(v is not None for v in y):
                     ax.plot(x, y, color=color, linewidth=2.3, alpha=0.95)
                     try:
@@ -203,12 +224,13 @@ def create_charts(parent, config, log=lambda *a, **k: None):
                     except ValueError:
                         pass
 
-
+                # --- Zeitachse ---
                 if len(x) > 0:
                     step = max(1, len(x) // 6)
                     ax.set_xticks(x[::step])
                     ax.set_xticklabels([t.strftime("%H:%M") for t in x[::step]], fontsize=7, color="#888")
 
+                # --- Label aktualisieren ---
                 latest = y[-1] if y else None
                 if latest is not None:
                     if key.startswith("t_"):
@@ -222,6 +244,7 @@ def create_charts(parent, config, log=lambda *a, **k: None):
                 else:
                     lbl.config(text="--")
 
+            # --- Canvas zeichnen ---
             for fig in figs:
                 fig.tight_layout(pad=0.6)
                 fig.canvas.draw_idle()

@@ -123,38 +123,49 @@ def create_scattered_chart(parent, config=config):
         return _smooth_connected._state
 
     # --- Update ---
+# --- Update ---
     def update_chart():
         try:
+            # --- Status prüfen ---
             status = utils.safe_read_json(config.STATUS_FILE) or {}
             connected_raw = bool(status.get("connected", False))
             sensor_ok_main = bool(status.get("sensor_ok_main", False))
             sensor_ok_ext = bool(status.get("sensor_ok_ext", False))
             connected = _smooth_connected(connected_raw)
 
+            # --- Daten + Offsets dynamisch laden ---
             d = utils.safe_read_json(config.DATA_FILE) or {}
+            cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+
             ti, hi = d.get("t_main"), d.get("h_main")
             te, he = d.get("t_ext"), d.get("h_ext")
+
+            leaf_off_c = float(cfg.get("leaf_offset", 0.0))
+            hum_off = float(cfg.get("humidity_offset", 0.0))
+            unit_celsius = bool(cfg.get("unit_celsius", True))
 
             if not connected:
                 internal_dot.set_offsets(np.empty((0, 2)))
                 external_dot.set_offsets(np.empty((0, 2)))
                 info_box.set_text("[🔴] Disconnected\n🌡️ Internal: —   🌡️ External: —")
                 fig.canvas.draw_idle()
-                frame.after(3000, update_chart)
+                frame.after(2000, update_chart)
                 return
 
-            # interne/externe Punkte + VPD
+            # --- Interner Sensor ---
             vpd_int = vpd_ext = None
-
             if sensor_ok_main and ti is not None and hi is not None:
-                ti_eff, hi_eff = ti + leaf_off_c, hi + hum_off
+                ti_eff = ti + leaf_off_c
+                hi_eff = min(max(hi + hum_off, 0), 100)  # clamp 0–100 %
                 internal_dot.set_offsets([[ti_eff if unit_celsius else _c_to_f(ti_eff), hi_eff]])
                 vpd_int = utils.calc_vpd(ti_eff, hi_eff)
             else:
                 internal_dot.set_offsets(np.empty((0, 2)))
 
+            # --- Externer Sensor ---
             if sensor_ok_ext and te is not None and he is not None:
-                te_eff, he_eff = te + leaf_off_c, he + hum_off
+                te_eff = te + leaf_off_c
+                he_eff = min(max(he + hum_off, 0), 100)
                 external_dot.set_offsets([[te_eff if unit_celsius else _c_to_f(te_eff), he_eff]])
                 vpd_ext = utils.calc_vpd(te_eff, he_eff)
             else:
@@ -163,14 +174,16 @@ def create_scattered_chart(parent, config=config):
             # --- Info ---
             unit = "°C" if unit_celsius else "°F"
             lines = ["[🟢] Connected"]
+
             if vpd_int is not None:
-                lines.append(f"🌡️ Internal: ✅ {ti:.1f}{unit} | {hi:.1f}% | {vpd_int:.2f} kPa")
+                lines.append(f"🌿 Internal: {ti:.1f}{unit} | {hi:.1f}% | {vpd_int:.2f} kPa")
             else:
-                lines.append("🌡️ Internal: ⚠️ no data")
+                lines.append("🌿 Internal: ⚠️ no data")
+
             if vpd_ext is not None:
-                lines.append(f"🌡️ External: ✅ {te:.1f}{unit} | {he:.1f}% | {vpd_ext:.2f} kPa")
+                lines.append(f"🌿 External: {te:.1f}{unit} | {he:.1f}% | {vpd_ext:.2f} kPa")
             else:
-                lines.append("🌡️ External: ⚠️ no sensor")
+                lines.append("🌿 External: ⚠️ no sensor")
 
             info_box.set_text("\n".join(lines))
             fig.canvas.draw_idle()
@@ -178,8 +191,9 @@ def create_scattered_chart(parent, config=config):
         except Exception as e:
             print(f"⚠️ ScatterChart Error: {e}")
 
-        frame.after(3000, update_chart)
+        frame.after(2000, update_chart)
 
+        
     # --- Reset & Stop ---
     def reset_chart():
         internal_dot.set_offsets(np.empty((0, 2)))

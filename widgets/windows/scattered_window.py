@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 scattered_window.py – separates Modul-Fenster mit integriertem VPD-Scatter-Chart.
-Mit Offset-Steuerung (Tastatur + Pfeile, voll themefähig).
+Mit Offset-Steuerung (Tastatur + Pfeile, global synchronisiert via utils.OffsetManager)
 """
 
 import tkinter as tk
@@ -17,15 +17,9 @@ THEME = getattr(config, "THEME", None) or config
 
 def open_window(parent, config=config, utils=utils):
     """Öffnet das Scattered-VPD-Fenster (mit Chart + Offsetsteuerung)."""
-    # 🔁 Später importieren, um Circular Import zu vermeiden
-    try:
-        from main_gui.header_gui import set_offsets_from_outside
-    except Exception:
-        def set_offsets_from_outside(*a, **k): pass
-
     win = tk.Toplevel(parent)
     win.title("🌡️ VIVOSUN – VPD Scattered Window")
-    win.geometry("1000x700")
+    win.geometry("1400x900")
     win.configure(bg=THEME.BG_MAIN if hasattr(THEME, "BG_MAIN") else THEME.BG)
 
     # ---------- HEADER ----------
@@ -53,26 +47,45 @@ def open_window(parent, config=config, utils=utils):
         font=("Segoe UI", 22, "bold")
     ).pack(side="left", padx=10)
 
-    # ---------- OFFSET-STEUERUNG ----------
+# ---------- OFFSET-STEUERUNG ----------
     controls = tk.Frame(header, bg=THEME.CARD_BG)
     controls.pack(side="right", padx=10, pady=6, anchor="e")
 
+    cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+    use_celsius = cfg.get("unit_celsius", True)
+    unit_label = "°C" if use_celsius else "°F"
+
     # --- Leaf Offset ---
-    tk.Label(controls, text="Leaf Offset (°C):",
-             bg=THEME.CARD_BG, fg=THEME.TEXT, font=("Segoe UI", 10, "bold")
-             ).grid(row=0, column=0, padx=4, pady=2, sticky="e")
+    tk.Label(
+        controls,
+        text=f"Leaf Offset ({unit_label}):",
+        bg=THEME.CARD_BG,
+        fg=THEME.TEXT,
+        font=("Segoe UI", 10, "bold")
+    ).grid(row=0, column=0, padx=4, pady=2, sticky="e")
 
-    leaf_offset_var = tk.DoubleVar(value=float(config.leaf_offset_c[0]))
+    leaf_offset_var = tk.DoubleVar(
+        value=utils.format_offset_display(config.leaf_offset_c[0], use_celsius)
+    )
 
-    entry_leaf = tk.Entry(controls, textvariable=leaf_offset_var, width=6,
-                          bg=THEME.BG_MAIN, fg=THEME.TEXT, justify="center",
-                          relief="flat", font=("Segoe UI", 11, "bold"))
+    entry_leaf = tk.Entry(
+        controls,
+        textvariable=leaf_offset_var,
+        width=6,
+        bg=THEME.BG_MAIN,
+        fg=THEME.TEXT,
+        justify="center",
+        relief="flat",
+        font=("Segoe UI", 11, "bold")
+    )
     entry_leaf.grid(row=0, column=1, padx=4)
 
     def change_leaf_offset(delta):
-        new_val = round(leaf_offset_var.get() + delta, 1)
-        leaf_offset_var.set(new_val)
-        set_offsets_from_outside(leaf=new_val, hum=None, persist=True)
+        """Offset ändern und korrekt nach °C speichern."""
+        current_c = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
+        new_c = current_c + (delta if use_celsius else delta * 5.0 / 9.0)
+        utils.set_offsets_from_outside(leaf=new_c, persist=True)
+        leaf_offset_var.set(utils.format_offset_display(new_c, use_celsius))
 
     tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
               bg=THEME.LIME, fg="black", relief="flat",
@@ -84,21 +97,32 @@ def open_window(parent, config=config, utils=utils):
               ).grid(row=0, column=3, padx=2)
 
     # --- Humidity Offset ---
-    tk.Label(controls, text="Humidity Offset (%):",
-             bg=THEME.CARD_BG, fg=THEME.TEXT, font=("Segoe UI", 10, "bold")
-             ).grid(row=1, column=0, padx=4, pady=2, sticky="e")
+    tk.Label(
+        controls,
+        text="Humidity Offset (%):",
+        bg=THEME.CARD_BG,
+        fg=THEME.TEXT,
+        font=("Segoe UI", 10, "bold")
+    ).grid(row=1, column=0, padx=4, pady=2, sticky="e")
 
     hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
 
-    entry_hum = tk.Entry(controls, textvariable=hum_offset_var, width=6,
-                         bg=THEME.BG_MAIN, fg=THEME.TEXT, justify="center",
-                         relief="flat", font=("Segoe UI", 11, "bold"))
+    entry_hum = tk.Entry(
+        controls,
+        textvariable=hum_offset_var,
+        width=6,
+        bg=THEME.BG_MAIN,
+        fg=THEME.TEXT,
+        justify="center",
+        relief="flat",
+        font=("Segoe UI", 11, "bold")
+    )
     entry_hum.grid(row=1, column=1, padx=4)
 
     def change_hum_offset(delta):
         new_val = round(hum_offset_var.get() + delta, 1)
+        utils.set_offsets_from_outside(hum=new_val, persist=True)
         hum_offset_var.set(new_val)
-        set_offsets_from_outside(leaf=None, hum=new_val, persist=True)
 
     tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
               bg=THEME.LIME, fg="black", relief="flat",
@@ -118,28 +142,34 @@ def open_window(parent, config=config, utils=utils):
             elif w == entry_hum:
                 change_hum_offset(+1.0 if event.keysym == "Up" else -1.0)
         elif event.keysym == "Return":
-            try:
-                set_offsets_from_outside(
-                    leaf=float(leaf_offset_var.get()),
-                    hum=float(hum_offset_var.get()),
-                    persist=True)
-            except Exception:
-                pass
+            new_leaf_c = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
+            utils.set_offsets_from_outside(
+                leaf=new_leaf_c,
+                hum=float(hum_offset_var.get()),
+                persist=True
+            )
 
     win.bind("<KeyPress>", on_key)
+    entry_leaf.bind("<Return>", on_key)
+    entry_hum.bind("<Return>", on_key)
 
     # --- Reset Button ---
-    tk.Button(header,
-              text="↺ Reset Offsets",
-              bg=getattr(THEME, "ORANGE", "#ff8844"),
-              fg="black", relief="flat",
-              font=("Segoe UI", 11, "bold"),
-              command=lambda: [
-                  leaf_offset_var.set(0.0),
-                  hum_offset_var.set(0.0),
-                  set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True)
-              ]
-              ).pack(side="right", padx=12)
+    tk.Button(
+        header,
+        text="↺ Reset Offsets",
+        bg=getattr(THEME, "ORANGE", "#ff8844"),
+        fg="black",
+        relief="flat",
+        font=("Segoe UI", 11, "bold"),
+        command=lambda: utils.set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True)
+    ).pack(side="right", padx=12)
+
+    # --- 🔗 Globale Callback-Verbindung (Header -> Scatter) ---
+    def on_global_offset_change(leaf_c, hum):
+        leaf_offset_var.set(utils.format_offset_display(leaf_c, use_celsius))
+        hum_offset_var.set(round(hum, 1))
+
+    utils.register_offset_callback(on_global_offset_change)
 
     # ---------- BODY ----------
     body = tk.Frame(win, bg=THEME.BG_MAIN)
@@ -158,30 +188,15 @@ def open_window(parent, config=config, utils=utils):
 
     # ---------- STATUS POLLING ----------
     def poll_status():
-        """Liest status.json und aktualisiert Status & Sensoranzeige."""
-        if not hasattr(poll_status, "_fail_counter"):
-            poll_status._fail_counter = 0
-            poll_status._last_connected = None
-
         try:
             data = utils.safe_read_json(config.STATUS_FILE) or {}
             connected = data.get("connected", False)
             main_ok = data.get("sensor_ok_main", False)
             ext_ok = data.get("sensor_ok_ext", False)
-
-            if connected:
-                poll_status._fail_counter = 0
-                poll_status._last_connected = True
-            else:
-                poll_status._fail_counter += 1
-                if poll_status._fail_counter >= 3:
-                    poll_status._last_connected = False
-
-            set_status(poll_status._last_connected)
+            set_status(connected)
             set_sensor_status(main_ok, ext_ok)
         except Exception:
             pass
-
         win.after(2000, poll_status)
 
     poll_status()

@@ -24,54 +24,6 @@ leaf_offset_var = None
 hum_offset_var = None
 
 
-# ===============================================================
-#   🔧 Offset-Synchronisation
-# ===============================================================
-def sync_offsets_to_gui():
-    try:
-        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-        use_celsius = cfg.get("unit_celsius", True)
-
-        if isinstance(leaf_offset_var, tk.DoubleVar):
-            val_c = float(config.leaf_offset_c[0])
-            display_val = val_c if use_celsius else val_c * 9.0 / 5.0
-            leaf_offset_var.set(round(display_val, 2))
-
-        if isinstance(hum_offset_var, tk.DoubleVar):
-            hum_offset_var.set(float(config.humidity_offset[0]))
-    except Exception as e:
-        print(f"⚠️ sync_offsets_to_gui Fehler: {e}")
-
-
-def set_offsets_from_outside(leaf=None, hum=None, persist=True):
-    try:
-        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-
-        if leaf is not None:
-            config.leaf_offset_c[0] = float(leaf)
-        if hum is not None:
-            config.humidity_offset[0] = float(hum)
-
-        if persist:
-            cfg["leaf_offset"] = config.leaf_offset_c[0]
-            cfg["humidity_offset"] = config.humidity_offset[0]
-            utils.safe_write_json(config.CONFIG_FILE, cfg)
-
-        sync_offsets_to_gui()
-    except Exception as e:
-        print(f"⚠️ set_offsets_from_outside Fehler: {e}")
-
-
-def update_leaf_offset(*_):
-    try:
-        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-        use_celsius = cfg.get("unit_celsius", True)
-        val_display = float(leaf_offset_var.get())
-        val_c = val_display if use_celsius else val_display * 5.0 / 9.0
-        set_offsets_from_outside(leaf=val_c, hum=None, persist=True)
-    except Exception as e:
-        print(f"⚠️ update_leaf_offset Fehler: {e}")
-
 
 # ===============================================================
 #   🧩 GUI-Header
@@ -107,119 +59,93 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     )
     title.pack(side="left", anchor="center")
 
-# ---------- OFFSET-STEUERUNG (2-REIHIG, RECHTSBÜNDIG) ----------
-    offset_area = tk.Frame(header, bg=THEME.CARD_BG)
-    offset_area.pack(side="right", pady=6, padx=(10, 10), anchor="e")  # rechtsbündig
+# ---------- OFFSET-STEUERUNG ----------
+    controls = tk.Frame(header, bg=THEME.CARD_BG)
+    controls.pack(side="right", padx=12, pady=6, anchor="e")
 
+    # --- Config lesen ---
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
-    unit_celsius = tk.BooleanVar(value=cfg.get("unit_celsius", True))
+    use_celsius = cfg.get("unit_celsius", True)
 
-    vivosun_green = "#00cc66"
-    vivosun_dark = "#00994d"
+    # --- Leaf Offset ---
+    tk.Label(controls, text=f"🌿 Leaf Offset ({'°C' if use_celsius else '°F'}):",
+             bg=THEME.CARD_BG, fg=THEME.TEXT, font=("Segoe UI", 10, "bold")
+             ).grid(row=0, column=0, padx=4, pady=2, sticky="e")
 
-    def make_arrow_button(parent, text, command):
-        """Stylischer Pfeilbutton."""
-        btn = tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bg=vivosun_green,
-            activebackground=vivosun_dark,
-            fg="black",
-            font=("Segoe UI", 13, "bold"),
-            relief="flat",
-            width=3,
-            height=1,
-            cursor="hand2"
-        )
-        btn.pack(side="left", padx=2)
-        return btn
+    leaf_offset_var = tk.DoubleVar(
+        value=utils.format_offset_display(config.leaf_offset_c[0], use_celsius)
+    )
 
-    # ---------- LINKER BLOCK (zweireihig) ----------
-    control_block = tk.Frame(offset_area, bg=THEME.CARD_BG)
-    control_block.pack(side="right", anchor="e")  # rechtsbündig im gesamten Bereich
+    entry_leaf = tk.Entry(
+        controls, textvariable=leaf_offset_var, width=6,
+        bg=THEME.BG_MAIN, fg=THEME.TEXT, justify="center",
+        relief="flat", font=("Segoe UI", 11, "bold")
+    )
+    entry_leaf.grid(row=0, column=1, padx=4)
 
-    # --- REIHE 1: LEAF OFFSET ---
-    row1 = tk.Frame(control_block, bg=THEME.CARD_BG)
-    row1.pack(side="top", anchor="e", pady=(0, 4))
+    def change_leaf_offset(delta):
+        """Offset ändern und korrekt nach °C speichern."""
+        current = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
+        new_val_c = current + delta if use_celsius else current + (delta * 5.0 / 9.0)
+        utils.set_offsets_from_outside(leaf=new_val_c, persist=True)
+        leaf_offset_var.set(utils.format_offset_display(new_val_c, use_celsius))
 
-    tk.Label(
-        row1,
-        text=f"🌿 Leaf Offset ({'°C' if unit_celsius.get() else '°F'}):",
-        bg=THEME.CARD_BG,
-        fg=THEME.TEXT,
-        font=("Segoe UI", 11, "bold")
-    ).pack(side="left", padx=(6, 4))
+    tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
+              bg=THEME.LIME, fg="black", relief="flat",
+              command=lambda: change_leaf_offset(+0.1)
+              ).grid(row=0, column=2, padx=2)
+    tk.Button(controls, text="▼", font=("Segoe UI", 11, "bold"),
+              bg=THEME.LIME, fg="black", relief="flat",
+              command=lambda: change_leaf_offset(-0.1)
+              ).grid(row=0, column=3, padx=2)
 
-    leaf_offset_var = tk.DoubleVar(value=float(config.leaf_offset_c[0]))
-
-    def update_leaf_offset(*_):
-        try:
-            set_offsets_from_outside(leaf=float(leaf_offset_var.get()), hum=None, persist=True)
-        except Exception:
-            set_offsets_from_outside(leaf=0.0, hum=None, persist=True)
-
-    leaf_offset_var.trace_add("write", update_leaf_offset)
-
-    tk.Label(
-        row1,
-        textvariable=leaf_offset_var,
-        bg=THEME.CARD_BG,
-        fg="lime",
-        font=("Consolas", 14, "bold"),
-        width=5
-    ).pack(side="left", padx=4)
-
-    make_arrow_button(row1, "▲", lambda: leaf_offset_var.set(round(leaf_offset_var.get() + 0.1, 1)))
-    make_arrow_button(row1, "▼", lambda: leaf_offset_var.set(round(leaf_offset_var.get() - 0.1, 1)))
-
-    # --- REIHE 2: HUMIDITY OFFSET ---
-    row2 = tk.Frame(control_block, bg=THEME.CARD_BG)
-    row2.pack(side="top", anchor="e")
-
-    tk.Label(
-        row2,
-        text="💧 Humidity Offset (%):",
-        bg=THEME.CARD_BG,
-        fg=THEME.TEXT,
-        font=("Segoe UI", 11, "bold")
-    ).pack(side="left", padx=(6, 4))
+    # --- Humidity Offset ---
+    tk.Label(controls, text="💧 Humidity Offset (%):",
+             bg=THEME.CARD_BG, fg=THEME.TEXT, font=("Segoe UI", 10, "bold")
+             ).grid(row=1, column=0, padx=4, pady=2, sticky="e")
 
     hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
 
-    def update_hum_offset(*_):
-        try:
-            set_offsets_from_outside(leaf=None, hum=float(hum_offset_var.get()), persist=True)
-        except Exception:
-            set_offsets_from_outside(leaf=None, hum=0.0, persist=True)
+    entry_hum = tk.Entry(
+        controls, textvariable=hum_offset_var, width=6,
+        bg=THEME.BG_MAIN, fg=THEME.TEXT, justify="center",
+        relief="flat", font=("Segoe UI", 11, "bold")
+    )
+    entry_hum.grid(row=1, column=1, padx=4)
 
-    hum_offset_var.trace_add("write", update_hum_offset)
+    def change_hum_offset(delta):
+        new_val = round(hum_offset_var.get() + delta, 1)
+        utils.set_offsets_from_outside(hum=new_val, persist=True)
+        hum_offset_var.set(new_val)
 
-    tk.Label(
-        row2,
-        textvariable=hum_offset_var,
-        bg=THEME.CARD_BG,
-        fg="#00ffff",
-        font=("Consolas", 14, "bold"),
-        width=5
-    ).pack(side="left", padx=4)
+    tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
+              bg=THEME.LIME, fg="black", relief="flat",
+              command=lambda: change_hum_offset(+1.0)
+              ).grid(row=1, column=2, padx=2)
+    tk.Button(controls, text="▼", font=("Segoe UI", 11, "bold"),
+              bg=THEME.LIME, fg="black", relief="flat",
+              command=lambda: change_hum_offset(-1.0)
+              ).grid(row=1, column=3, padx=2)
 
-    make_arrow_button(row2, "▲", lambda: hum_offset_var.set(round(hum_offset_var.get() + 1.0, 1)))
-    make_arrow_button(row2, "▼", lambda: hum_offset_var.set(round(hum_offset_var.get() - 1.0, 1)))
+    # --- Reset Button ---
+    tk.Button(
+        header,
+        text="↺ Reset Offsets",
+        bg=getattr(THEME, "ORANGE", "#ff8844"),
+        fg="black", relief="flat",
+        font=("Segoe UI", 11, "bold"),
+        command=lambda: utils.set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True)
+    ).pack(side="right", padx=12)
 
-    # ---------- RESET-BUTTON RECHTS DANEBEN ----------
-    def reset_offsets():
-        leaf_offset_var.set(0.0)
-        hum_offset_var.set(0.0)
-        print("Offsets reset (Leaf=0.0°C, Humidity=0.0%)")
+    # --- Sync Callback (von Scatter/anderen Fenstern) ---
+    def on_global_offset_change(leaf, hum):
+        cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
+        use_celsius = cfg.get("unit_celsius", True)
+        leaf_offset_var.set(utils.format_offset_display(leaf, use_celsius))
+        hum_offset_var.set(round(hum, 1))
 
-    THEME.make_button(
-        offset_area,
-        "↺ Reset Offsets",
-        reset_offsets,
-        color=THEME.LIME
-    ).pack(side="right", padx=(12, 4), anchor="e", pady=(10, 0))
-
+    utils.register_offset_callback(on_global_offset_change)
+    
     # ---------- BUTTON ROWS ----------
     button_frame = tk.Frame(header, bg=THEME.CARD_BG)
     button_frame.pack(side="bottom", fill="x", pady=6)
@@ -234,18 +160,21 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     def reset_charts():
         try:
             import main_gui.charts_gui as charts_gui
-            if hasattr(charts_gui, "data_buffers"):
-                for key, buf in charts_gui.data_buffers.items():
+
+            if hasattr(charts_gui, "global_data_buffers") and charts_gui.global_data_buffers:
+                for key, buf in charts_gui.global_data_buffers.items():
                     if isinstance(buf, list):
                         buf.clear()
-                if "timestamps" in charts_gui.data_buffers:
-                    charts_gui.data_buffers["timestamps"].clear()
+                if "timestamps" in charts_gui.global_data_buffers:
+                    charts_gui.global_data_buffers["timestamps"].clear()
                 print("✅ Charts erfolgreich zurückgesetzt.")
             else:
-                print("⚠️ Keine Datenpuffer in charts_gui gefunden.")
+                print("⚠️ Keine aktiven Datenpuffer gefunden.")
+
         except Exception as e:
             print(f"⚠️ Fehler beim Chart-Reset: {e}")
 
+            
     def export_chart():
         from tkinter import filedialog
         import csv, datetime
@@ -369,5 +298,4 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     THEME.make_button(row2, "🧪 Test Window", open_test_window, color=THEME.LIME).pack(side="left", padx=6)
     THEME.make_button(row2, "🧪 New Scatter", open_scattered_window, color=THEME.LIME).pack(side="left", padx=6)
 
-    sync_offsets_to_gui()
     return header
