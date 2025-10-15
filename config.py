@@ -13,7 +13,7 @@ from pathlib import Path
 # --- App Infos ---
 APP_NAME = "VIVOSUN Thermo Dashboard"
 APP_DISPLAY = "🌱 VIVOSUN Thermo Dashboard"
-APP_VERSION = "1.2.2"
+VERSION = "v3.0 Release"
 APP_AUTHOR = "Dominik Rosenthal"
 APP_COPYRIGHT = f"© 2025 {APP_AUTHOR}"
 APP_GITHUB = "https://github.com/Hackintosh1980/Vivosun-Dashboard"

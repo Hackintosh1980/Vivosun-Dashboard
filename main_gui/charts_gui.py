@@ -93,11 +93,11 @@ def create_charts(parent, config, log=lambda *a, **k: None):
             text="--",
             fg=color,
             bg=config.CARD,
-            font=("Segoe UI", 40, "bold"),
+            font=("Segoe UI", 50, "bold"),
             anchor="w",
             justify="left"
         )
-        lbl_value.place(relx=0.08, rely=0.0, anchor="nw")
+        lbl_value.place(relx=0.08, rely=0.02, anchor="nw")
 
         # --- Titel darunter (links) ---
         lbl_title = tk.Label(

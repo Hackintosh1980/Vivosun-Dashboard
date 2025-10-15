@@ -47,10 +47,11 @@ def open_window(parent, config=config, utils=utils):
         font=("Segoe UI", 22, "bold")
     ).pack(side="left", padx=10)
 
-# ---------- OFFSET-STEUERUNG ----------
+    # ---------- OFFSET-STEUERUNG ----------
     controls = tk.Frame(header, bg=THEME.CARD_BG)
     controls.pack(side="right", padx=10, pady=6, anchor="e")
 
+    # --- Config lesen ---
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     use_celsius = cfg.get("unit_celsius", True)
     unit_label = "°C" if use_celsius else "°F"
@@ -64,7 +65,7 @@ def open_window(parent, config=config, utils=utils):
         font=("Segoe UI", 10, "bold")
     ).grid(row=0, column=0, padx=4, pady=2, sticky="e")
 
-    leaf_offset_var = tk.DoubleVar(
+    leaf_offset_var = tk.StringVar(
         value=utils.format_offset_display(config.leaf_offset_c[0], use_celsius)
     )
 
@@ -80,21 +81,40 @@ def open_window(parent, config=config, utils=utils):
     )
     entry_leaf.grid(row=0, column=1, padx=4)
 
-    def change_leaf_offset(delta):
-        """Offset ändern und korrekt nach °C speichern."""
-        current_c = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
-        new_c = current_c + (delta if use_celsius else delta * 5.0 / 9.0)
-        utils.set_offsets_from_outside(leaf=new_c, persist=True)
-        leaf_offset_var.set(utils.format_offset_display(new_c, use_celsius))
+    def apply_leaf_offset():
+        """Manuelle Eingabe übernehmen (Return/Fokusverlust)."""
+        try:
+            new_val_c = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
+            utils.set_offsets_from_outside(leaf=new_val_c, persist=True)
+            leaf_offset_var.set(utils.format_offset_display(new_val_c, use_celsius))
+        except Exception:
+            pass
 
-    tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_leaf_offset(+0.1)
-              ).grid(row=0, column=2, padx=2)
-    tk.Button(controls, text="▼", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_leaf_offset(-0.1)
-              ).grid(row=0, column=3, padx=2)
+    def change_leaf_offset(delta):
+        """Offset ändern – stabil für °C und °F (keine Button-Limitierung mehr)."""
+        try:
+            current_c = float(config.leaf_offset_c[0])  # immer echte °C
+            step_c = delta if use_celsius else delta * 5.0 / 9.0
+            new_val_c = round(current_c + step_c, 3)
+            utils.set_offsets_from_outside(leaf=new_val_c, persist=True)
+            leaf_offset_var.set(utils.format_offset_display(new_val_c, use_celsius))
+        except Exception:
+            pass
+
+    tk.Button(
+        controls, text="▲", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
+        command=lambda: change_leaf_offset(+0.1)
+    ).grid(row=0, column=2, padx=2)
+
+    tk.Button(
+        controls, text="▼", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
+        command=lambda: change_leaf_offset(-0.1)
+    ).grid(row=0, column=3, padx=2)
+
+    entry_leaf.bind("<Return>", lambda e: apply_leaf_offset())
+    entry_leaf.bind("<FocusOut>", lambda e: apply_leaf_offset())
 
     # --- Humidity Offset ---
     tk.Label(
@@ -105,7 +125,7 @@ def open_window(parent, config=config, utils=utils):
         font=("Segoe UI", 10, "bold")
     ).grid(row=1, column=0, padx=4, pady=2, sticky="e")
 
-    hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
+    hum_offset_var = tk.StringVar(value=f"{float(config.humidity_offset[0]):.1f}")
 
     entry_hum = tk.Entry(
         controls,
@@ -119,19 +139,37 @@ def open_window(parent, config=config, utils=utils):
     )
     entry_hum.grid(row=1, column=1, padx=4)
 
-    def change_hum_offset(delta):
-        new_val = round(hum_offset_var.get() + delta, 1)
-        utils.set_offsets_from_outside(hum=new_val, persist=True)
-        hum_offset_var.set(new_val)
+    def apply_hum_offset():
+        try:
+            new_val = round(float(hum_offset_var.get()), 1)
+            utils.set_offsets_from_outside(hum=new_val, persist=True)
+            hum_offset_var.set(f"{new_val:.1f}")
+        except Exception:
+            pass
 
-    tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_hum_offset(+1.0)
-              ).grid(row=1, column=2, padx=2)
-    tk.Button(controls, text="▼", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_hum_offset(-1.0)
-              ).grid(row=1, column=3, padx=2)
+    def change_hum_offset(delta):
+        try:
+            current = float(config.humidity_offset[0])
+            new_val = round(current + delta, 1)
+            utils.set_offsets_from_outside(hum=new_val, persist=True)
+            hum_offset_var.set(f"{new_val:.1f}")
+        except Exception:
+            pass
+
+    tk.Button(
+        controls, text="▲", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
+        command=lambda: change_hum_offset(+1.0)
+    ).grid(row=1, column=2, padx=2)
+
+    tk.Button(
+        controls, text="▼", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
+        command=lambda: change_hum_offset(-1.0)
+    ).grid(row=1, column=3, padx=2)
+
+    entry_hum.bind("<Return>", lambda e: apply_hum_offset())
+    entry_hum.bind("<FocusOut>", lambda e: apply_hum_offset())
 
     # --- Tastatursteuerung ---
     def on_key(event):
@@ -142,17 +180,11 @@ def open_window(parent, config=config, utils=utils):
             elif w == entry_hum:
                 change_hum_offset(+1.0 if event.keysym == "Up" else -1.0)
         elif event.keysym == "Return":
-            new_leaf_c = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
-            utils.set_offsets_from_outside(
-                leaf=new_leaf_c,
-                hum=float(hum_offset_var.get()),
-                persist=True
-            )
+            apply_leaf_offset()
+            apply_hum_offset()
 
     win.bind("<KeyPress>", on_key)
-    entry_leaf.bind("<Return>", on_key)
-    entry_hum.bind("<Return>", on_key)
-
+    
     # --- Reset Button ---
     THEME.make_button(
         header,

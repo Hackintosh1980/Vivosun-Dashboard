@@ -66,79 +66,122 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
     # --- Config lesen ---
     cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
     use_celsius = cfg.get("unit_celsius", True)
+    unit_label = "°C" if use_celsius else "°F"
 
     # --- Leaf Offset ---
-    tk.Label(controls, text=f"🌿 Leaf Offset ({'°C' if use_celsius else '°F'}):",
-             bg=THEME.CARD_BG, fg=THEME.TEXT, font=("Segoe UI", 10, "bold")
-             ).grid(row=0, column=0, padx=4, pady=2, sticky="e")
+    tk.Label(
+        controls,
+        text=f"🌿 Leaf Offset ({unit_label}):",
+        bg=THEME.CARD_BG,
+        fg=THEME.TEXT,
+        font=("Segoe UI", 10, "bold")
+    ).grid(row=0, column=0, padx=4, pady=2, sticky="e")
 
-    leaf_offset_var = tk.DoubleVar(
+    leaf_offset_var = tk.StringVar(
         value=utils.format_offset_display(config.leaf_offset_c[0], use_celsius)
     )
 
     entry_leaf = tk.Entry(
-        controls, textvariable=leaf_offset_var, width=6,
-        bg=THEME.BG_MAIN, fg=THEME.TEXT, justify="center",
-        relief="flat", font=("Segoe UI", 11, "bold")
+        controls,
+        textvariable=leaf_offset_var,
+        width=6,
+        bg=THEME.BG_MAIN,
+        fg=THEME.TEXT,
+        justify="center",
+        relief="flat",
+        font=("Segoe UI", 11, "bold")
     )
     entry_leaf.grid(row=0, column=1, padx=4)
 
     def change_leaf_offset(delta):
-        """Offset ändern und korrekt nach °C speichern."""
-        current = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
-        new_val_c = current + delta if use_celsius else current + (delta * 5.0 / 9.0)
-        utils.set_offsets_from_outside(leaf=new_val_c, persist=True)
-        leaf_offset_var.set(utils.format_offset_display(new_val_c, use_celsius))
+        """Offset ändern – stabil für °C und °F."""
+        try:
+            # Wir holen IMMER den letzten echten °C-Wert aus config
+            current_c = float(config.leaf_offset_c[0])
+            step_c = delta if use_celsius else delta * 5.0 / 9.0
+            new_val_c = round(current_c + step_c, 3)
 
-    tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_leaf_offset(+0.1)
-              ).grid(row=0, column=2, padx=2)
-    tk.Button(controls, text="▼", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_leaf_offset(-0.1)
-              ).grid(row=0, column=3, padx=2)
+            utils.set_offsets_from_outside(leaf=new_val_c, persist=True)
+            leaf_offset_var.set(utils.format_offset_display(new_val_c, use_celsius))
+        except Exception:
+            pass
+        
+    def apply_leaf_offset():
+        """Manuelle Eingabe übernehmen (Return/Fokusverlust)."""
+        try:
+            new_val_c = utils.parse_offset_input(leaf_offset_var.get(), use_celsius)
+            utils.set_offsets_from_outside(leaf=new_val_c, persist=True)
+            leaf_offset_var.set(utils.format_offset_display(new_val_c, use_celsius))
+        except Exception:
+            pass
+        
+    tk.Button(
+        controls, text="▲", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
+        command=lambda: change_leaf_offset(+0.1)
+    ).grid(row=0, column=2, padx=2)
+
+    tk.Button(
+        controls, text="▼", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
+        command=lambda: change_leaf_offset(-0.1)
+    ).grid(row=0, column=3, padx=2)
+
+    entry_leaf.bind("<Return>", lambda e: apply_leaf_offset())
+    entry_leaf.bind("<FocusOut>", lambda e: apply_leaf_offset())
 
     # --- Humidity Offset ---
-    tk.Label(controls, text="💧 Humidity Offset (%):",
-             bg=THEME.CARD_BG, fg=THEME.TEXT, font=("Segoe UI", 10, "bold")
-             ).grid(row=1, column=0, padx=4, pady=2, sticky="e")
+    tk.Label(
+        controls,
+        text="💧 Humidity Offset (%):",
+        bg=THEME.CARD_BG,
+        fg=THEME.TEXT,
+        font=("Segoe UI", 10, "bold")
+    ).grid(row=1, column=0, padx=4, pady=2, sticky="e")
 
-    hum_offset_var = tk.DoubleVar(value=float(config.humidity_offset[0]))
+    hum_offset_var = tk.StringVar(value=f"{float(config.humidity_offset[0]):.1f}")
 
     entry_hum = tk.Entry(
-        controls, textvariable=hum_offset_var, width=6,
-        bg=THEME.BG_MAIN, fg=THEME.TEXT, justify="center",
-        relief="flat", font=("Segoe UI", 11, "bold")
+        controls,
+        textvariable=hum_offset_var,
+        width=6,
+        bg=THEME.BG_MAIN,
+        fg=THEME.TEXT,
+        justify="center",
+        relief="flat",
+        font=("Segoe UI", 11, "bold")
     )
     entry_hum.grid(row=1, column=1, padx=4)
 
+    def apply_hum_offset():
+        try:
+            new_val = round(float(hum_offset_var.get()), 1)
+            utils.set_offsets_from_outside(hum=new_val, persist=True)
+            hum_offset_var.set(f"{new_val:.1f}")
+        except Exception:
+            pass
+
     def change_hum_offset(delta):
-        new_val = round(hum_offset_var.get() + delta, 1)
+        new_val = round(float(hum_offset_var.get()) + delta, 1)
         utils.set_offsets_from_outside(hum=new_val, persist=True)
-        hum_offset_var.set(new_val)
+        hum_offset_var.set(f"{new_val:.1f}")
 
     tk.Button(
-        controls,
-        text="▲",
-        font=("Segoe UI", 11, "bold"),
-        bg=THEME.LIME,
-        fg="black",
-        relief="flat",
+        controls, text="▲", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
         command=lambda: change_hum_offset(+1.0)
     ).grid(row=1, column=2, padx=2)
 
     tk.Button(
-        controls,
-        text="▼",
-        font=("Segoe UI", 11, "bold"),
-        bg=THEME.LIME,
-        fg="black",
-        relief="flat",
+        controls, text="▼", font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME, fg="black", relief="flat",
         command=lambda: change_hum_offset(-1.0)
     ).grid(row=1, column=3, padx=2)
 
-# --- Reset Button (Theme-kompatibel, 4x eingerückt) ---
+    entry_hum.bind("<Return>", lambda e: apply_hum_offset())
+    entry_hum.bind("<FocusOut>", lambda e: apply_hum_offset())
+
+    # --- Reset Button ---
     THEME.make_button(
         header,
         "↺ Reset Offsets",
@@ -146,12 +189,12 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         color=getattr(THEME, "LIME", "#00FF88")
     ).pack(side="right", padx=12, pady=4)
 
-    # --- Sync Callback (von Scatter/anderen Fenstern) ---
+    # --- Global Sync ---
     def on_global_offset_change(leaf, hum):
         cfg = utils.safe_read_json(config.CONFIG_FILE) or {}
         use_celsius = cfg.get("unit_celsius", True)
         leaf_offset_var.set(utils.format_offset_display(leaf, use_celsius))
-        hum_offset_var.set(round(hum, 1))
+        hum_offset_var.set(f"{hum:.1f}")
 
     utils.register_offset_callback(on_global_offset_change)
     
