@@ -118,24 +118,33 @@ def build_header(root, config, data_buffers, time_buffer, log=lambda *a, **k: No
         utils.set_offsets_from_outside(hum=new_val, persist=True)
         hum_offset_var.set(new_val)
 
-    tk.Button(controls, text="▲", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_hum_offset(+1.0)
-              ).grid(row=1, column=2, padx=2)
-    tk.Button(controls, text="▼", font=("Segoe UI", 11, "bold"),
-              bg=THEME.LIME, fg="black", relief="flat",
-              command=lambda: change_hum_offset(-1.0)
-              ).grid(row=1, column=3, padx=2)
-
-    # --- Reset Button ---
     tk.Button(
-        header,
-        text="↺ Reset Offsets",
-        bg=getattr(THEME, "ORANGE", "#ff8844"),
-        fg="black", relief="flat",
+        controls,
+        text="▲",
         font=("Segoe UI", 11, "bold"),
-        command=lambda: utils.set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True)
-    ).pack(side="right", padx=12)
+        bg=THEME.LIME,
+        fg="black",
+        relief="flat",
+        command=lambda: change_hum_offset(+1.0)
+    ).grid(row=1, column=2, padx=2)
+
+    tk.Button(
+        controls,
+        text="▼",
+        font=("Segoe UI", 11, "bold"),
+        bg=THEME.LIME,
+        fg="black",
+        relief="flat",
+        command=lambda: change_hum_offset(-1.0)
+    ).grid(row=1, column=3, padx=2)
+
+# --- Reset Button (Theme-kompatibel, 4x eingerückt) ---
+    THEME.make_button(
+        header,
+        "↺ Reset Offsets",
+        lambda: utils.set_offsets_from_outside(leaf=0.0, hum=0.0, persist=True),
+        color=getattr(THEME, "LIME", "#00FF88")
+    ).pack(side="right", padx=12, pady=4)
 
     # --- Sync Callback (von Scatter/anderen Fenstern) ---
     def on_global_offset_change(leaf, hum):
