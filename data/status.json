@@ -1,6 +1,6 @@
 {
-    "connected": true,
-    "sensor_ok_main": true,
+    "connected": false,
+    "sensor_ok_main": false,
     "sensor_ok_ext": false,
-    "sensor_ok": true
+    "sensor_ok": false
 }
