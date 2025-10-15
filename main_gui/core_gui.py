@@ -8,6 +8,7 @@ Bindet Header, Charts, Log und Footer ein.
 import tkinter as tk
 import json
 from collections import deque
+import utils
 
 import config, utils
 from main_gui.header_gui import build_header
